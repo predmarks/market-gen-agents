@@ -2,30 +2,31 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
-import type { MarketStatus, Review } from '@/db/types';
+import type { MarketStatus, Review, Iteration } from '@/db/types';
 
 interface MarketActionsProps {
   marketId: string;
   status: MarketStatus;
   review: Review | null;
+  iterations?: Iteration[] | null;
 }
 
-export function MarketActions({ marketId, status, review }: MarketActionsProps) {
+export function MarketActions({ marketId, status, iterations }: MarketActionsProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const reviewing = status === 'review' && !review;
+  const processing = status === 'processing';
 
   useEffect(() => {
-    if (reviewing) {
+    if (processing) {
       pollRef.current = setInterval(() => router.refresh(), 5000);
     }
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [reviewing, router]);
+  }, [processing, router]);
 
   async function handleAction(action: string, options?: RequestInit) {
     setLoading(action);
@@ -51,8 +52,7 @@ export function MarketActions({ marketId, status, review }: MarketActionsProps) 
     }
   }
 
-  const hasRewrites = review?.suggestedRewrites &&
-    Object.values(review.suggestedRewrites).some(Boolean);
+  const iterationCount = iterations?.length ?? 0;
 
   return (
     <div className="space-y-3">
@@ -66,13 +66,13 @@ export function MarketActions({ marketId, status, review }: MarketActionsProps) 
           />
         )}
 
-        {status === 'review' && !review && (
-          <p className="text-sm text-yellow-700 bg-yellow-50 px-4 py-2 rounded-md">
-            Revisión en progreso…
+        {status === 'processing' && (
+          <p className="text-sm text-amber-700 bg-amber-50 px-4 py-2 rounded-md">
+            Procesando… {iterationCount > 0 ? `(iteración ${iterationCount})` : ''}
           </p>
         )}
 
-        {status === 'review' && review && (
+        {status === 'proposal' && (
           <>
             <ActionButton
               label="Aprobar"
@@ -80,18 +80,6 @@ export function MarketActions({ marketId, status, review }: MarketActionsProps) 
               onClick={() => handleAction('approve')}
               variant="success"
             />
-            {hasRewrites && (
-              <ActionButton
-                label="Aprobar con Rewrites"
-                loading={loading === 'approve-rw'}
-                onClick={() =>
-                  handleAction('approve', {
-                    body: JSON.stringify({ applyRewrites: true }),
-                  })
-                }
-                variant="success"
-              />
-            )}
             <ActionButton
               label="Rechazar"
               loading={loading === 'reject'}

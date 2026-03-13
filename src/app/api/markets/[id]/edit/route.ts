@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/client';
 import { markets } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { logMarketEvent } from '@/lib/market-events';
 
 export async function POST(
   request: NextRequest,
@@ -14,9 +15,9 @@ export async function POST(
     return NextResponse.json({ error: 'Market not found' }, { status: 404 });
   }
 
-  if (market.status !== 'review') {
+  if (market.status !== 'proposal') {
     return NextResponse.json(
-      { error: `Cannot edit a market with status "${market.status}". Must be "review".` },
+      { error: `Cannot edit a market with status "${market.status}". Must be "proposal".` },
       { status: 400 },
     );
   }
@@ -54,6 +55,10 @@ export async function POST(
     .set(updates)
     .where(eq(markets.id, id))
     .returning();
+
+  await logMarketEvent(id, 'human_edited', {
+    detail: { fields: Object.keys(updates).filter((k) => k !== 'status' && k !== 'publishedAt'), approved: !!approve },
+  });
 
   return NextResponse.json(updated);
 }

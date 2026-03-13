@@ -58,21 +58,20 @@ async function test() {
   console.log('Recommendation:', scoring.recommendation);
   console.log('✅ Scoring done\n');
 
-  // Step 4: Rewriter (conditional)
-  const needsRewrite =
+  // Step 4: Improver (conditional)
+  const needsImprovement =
     scoring.recommendation === 'rewrite_then_publish' ||
     scoring.scores.ambiguity < 7 ||
     scoring.scores.timingSafety < 7;
 
-  let rewrites;
-  if (needsRewrite) {
-    console.log('=== Step 4: Rewriter ===');
-    const { rewriteMarket } = await import('../src/agents/reviewer/rewriter');
-    rewrites = await rewriteMarket(testMarket as any, scoring, rulesCheck, verification);
-    console.log('Suggested rewrites:', JSON.stringify(rewrites, null, 2));
-    console.log('✅ Rewrite done\n');
+  if (needsImprovement) {
+    console.log('=== Step 4: Improver ===');
+    const { improveMarket } = await import('../src/agents/reviewer/improver');
+    const improved = await improveMarket(testMarket as any, 'Test feedback', []);
+    console.log('Improved market:', JSON.stringify(improved, null, 2));
+    console.log('✅ Improvement done\n');
   } else {
-    console.log('=== Step 4: Rewriter (skipped — not needed) ===\n');
+    console.log('=== Step 4: Improver (skipped — not needed) ===\n');
   }
 
   // Save review to DB
@@ -83,13 +82,12 @@ async function test() {
     softRuleResults: rulesCheck.softRuleResults,
     dataVerification: verification.claims,
     resolutionSourceCheck: verification.resolutionSource,
-    suggestedRewrites: rewrites,
     recommendation: scoring.recommendation,
     reviewedAt: new Date().toISOString(),
   };
   await db
     .update(schema.markets)
-    .set({ review, status: 'review' })
+    .set({ review, status: 'processing' })
     .where(eq(schema.markets.id, testMarket.id));
   console.log('✅ Review saved to database');
   console.log('\nFull review:', JSON.stringify(review, null, 2));

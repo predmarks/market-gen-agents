@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/client';
 import { markets } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import type { Review } from '@/db/types';
+import { logMarketEvent } from '@/lib/market-events';
 
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -15,36 +15,20 @@ export async function POST(
     return NextResponse.json({ error: 'Market not found' }, { status: 404 });
   }
 
-  if (market.status !== 'review') {
+  if (market.status !== 'proposal') {
     return NextResponse.json(
-      { error: `Cannot approve a market with status "${market.status}". Must be "review".` },
+      { error: `Cannot approve a market with status "${market.status}". Must be "proposal".` },
       { status: 400 },
     );
   }
 
-  const body = await request.json().catch(() => ({}));
-  const applyRewrites = body.applyRewrites === true;
-
-  const updates: Record<string, unknown> = {
-    status: 'approved',
-    publishedAt: new Date(),
-  };
-
-  // Apply suggested rewrites if requested
-  const review = market.review as Review | null;
-  if (applyRewrites && review?.suggestedRewrites) {
-    const rw = review.suggestedRewrites;
-    if (rw.title) updates.title = rw.title;
-    if (rw.description) updates.description = rw.description;
-    if (rw.resolutionCriteria) updates.resolutionCriteria = rw.resolutionCriteria;
-    if (rw.contingencies) updates.contingencies = rw.contingencies;
-  }
-
   const [updated] = await db
     .update(markets)
-    .set(updates)
+    .set({ status: 'approved', publishedAt: new Date() })
     .where(eq(markets.id, id))
     .returning();
+
+  await logMarketEvent(id, 'human_approved');
 
   return NextResponse.json(updated);
 }

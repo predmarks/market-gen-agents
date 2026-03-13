@@ -24,7 +24,7 @@ export async function POST(
 
   await db
     .update(markets)
-    .set({ status: 'review' })
+    .set({ status: 'processing' })
     .where(eq(markets.id, id));
 
   await inngest.send({

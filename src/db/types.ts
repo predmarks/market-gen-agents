@@ -1,6 +1,7 @@
 export const MARKET_STATUSES = [
   'candidate',
-  'review',
+  'processing',
+  'proposal',
   'approved',
   'open',
   'closed',
@@ -58,22 +59,37 @@ export interface ResolutionSourceCheck {
   note: string;
 }
 
-export interface SuggestedRewrites {
-  title?: string;
-  description?: string;
-  resolutionCriteria?: string;
-  contingencies?: string;
-}
-
-export interface Review {
+export interface ReviewResult {
   scores: ReviewScores;
   hardRuleResults: RuleResult[];
   softRuleResults: RuleResult[];
   dataVerification: DataVerification[];
   resolutionSourceCheck?: ResolutionSourceCheck;
-  suggestedRewrites?: SuggestedRewrites;
-  recommendation?: 'publish' | 'rewrite_then_publish' | 'hold' | 'reject';
+  recommendation: 'publish' | 'rewrite_then_publish' | 'hold' | 'reject';
   reviewedAt: string;
+}
+
+// Keep Review as alias for backward compatibility with existing DB data
+export type Review = ReviewResult;
+
+export interface MarketSnapshot {
+  title: string;
+  description: string;
+  resolutionCriteria: string;
+  resolutionSource: string;
+  contingencies: string;
+  category: MarketCategory;
+  tags: string[];
+  endTimestamp: number;
+  expectedResolutionDate: string;
+  timingSafety: TimingSafety;
+}
+
+export interface Iteration {
+  version: number;
+  market: MarketSnapshot;
+  review: ReviewResult;
+  feedback?: string;
 }
 
 export interface Resolution {
@@ -107,7 +123,34 @@ export interface Market {
   outcome?: 'Si' | 'No' | null;
   sourceContext: SourceContext;
   review?: Review | null;
+  iterations?: Iteration[] | null;
   resolution?: Resolution | null;
+}
+
+export interface SourcingStep {
+  name: string;
+  status: 'pending' | 'running' | 'done' | 'error';
+  detail?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export const EVENT_TYPES = [
+  'pipeline_started', 'pipeline_resumed',
+  'data_verified', 'rules_checked', 'scored', 'improved',
+  'pipeline_proposed', 'pipeline_rejected',
+  'human_approved', 'human_rejected', 'human_edited',
+  'status_changed',
+] as const;
+export type MarketEventType = (typeof EVENT_TYPES)[number];
+
+export interface MarketEvent {
+  id: string;
+  marketId: string;
+  type: MarketEventType;
+  iteration?: number | null;
+  detail?: Record<string, unknown> | null;
+  createdAt: Date;
 }
 
 export interface DeployableMarket {

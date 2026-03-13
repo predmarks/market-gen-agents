@@ -126,3 +126,6 @@ export const SOFT_RULES: Rule[] = [
       markets are fine and should NOT be penalized.`,
   },
 ];
+
+// Hard rules that cannot be fixed by rewriting — immediate rejection
+export const UNFIXABLE_HARD_RULES = ['H4', 'H5', 'H8'] as const;

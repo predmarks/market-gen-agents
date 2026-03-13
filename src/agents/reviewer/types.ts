@@ -1,4 +1,4 @@
-import type { SourceContext, Review, Resolution } from '@/db/types';
+import type { SourceContext, Review, Resolution, Iteration } from '@/db/types';
 
 /**
  * Market record type that works with both Drizzle select results (Date fields)
@@ -25,5 +25,6 @@ export interface MarketRecord {
   outcome: string | null;
   sourceContext: SourceContext;
   review: Review | null;
+  iterations?: Iteration[] | null;
   resolution: Resolution | null;
 }

@@ -187,6 +187,7 @@ const seedMarkets = [
       ],
       softRuleResults: [],
       dataVerification: [],
+      recommendation: 'reject' as const,
       reviewedAt: '2026-03-08T14:00:00Z',
     },
   },

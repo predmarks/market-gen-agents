@@ -3,43 +3,54 @@ export const dynamic = 'force-dynamic';
 import Link from 'next/link';
 import { db } from '@/db/client';
 import { markets } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
-import type { MarketStatus, TimingSafety, Review } from '@/db/types';
-import { StatusBadge } from './_components/StatusBadge';
-import { TimingSafetyIndicator } from './_components/TimingSafetyIndicator';
+import { inArray, asc } from 'drizzle-orm';
+import type { MarketStatus, TimingSafety } from '@/db/types';
+import { StatusBadge } from '../_components/StatusBadge';
+import { TimingSafetyIndicator } from '../_components/TimingSafetyIndicator';
 
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return '—';
+function formatTimestamp(ts: number): string {
   return new Intl.DateTimeFormat('es-AR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
-  }).format(date);
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  }).format(new Date(ts * 1000));
 }
 
-export default async function ProposalsPage() {
+function timeRemaining(ts: number): { text: string; urgent: boolean } {
+  const now = Date.now() / 1000;
+  const diff = ts - now;
+  if (diff <= 0) return { text: 'Cerrado', urgent: true };
+  const hours = Math.floor(diff / 3600);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return { text: `${days}d ${hours % 24}h`, urgent: days < 3 };
+  return { text: `${hours}h`, urgent: true };
+}
+
+export default async function OpenMarketsPage() {
   const results = await db
     .select()
     .from(markets)
-    .where(eq(markets.status, 'proposal'))
-    .orderBy(desc(markets.createdAt));
+    .where(inArray(markets.status, ['approved', 'open']))
+    .orderBy(asc(markets.endTimestamp));
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Propuestas</h1>
-        <span className="text-sm text-gray-500">{results.length} propuestas</span>
+        <h1 className="text-2xl font-bold">Abiertos</h1>
+        <span className="text-sm text-gray-500">{results.length} mercados</span>
       </div>
 
       {results.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
-          No hay propuestas pendientes.
+          No hay mercados abiertos.
         </div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
           {results.map((market) => {
-            const review = market.review as Review | null;
-            const score = review?.scores?.overallScore;
+            const remaining = timeRemaining(market.endTimestamp);
 
             return (
               <Link
@@ -60,15 +71,15 @@ export default async function ProposalsPage() {
                       <TimingSafetyIndicator
                         safety={market.timingSafety as TimingSafety}
                       />
-                      {score != null && (
-                        <span className="text-xs text-gray-500">
-                          Score: {score.toFixed(1)}
-                        </span>
-                      )}
                     </div>
                   </div>
-                  <div className="text-right text-xs text-gray-500 shrink-0">
-                    <div>Creado: {formatDate(market.createdAt)}</div>
+                  <div className="text-right text-xs shrink-0">
+                    <div className="text-gray-500">
+                      Cierre: {formatTimestamp(market.endTimestamp)}
+                    </div>
+                    <div className={remaining.urgent ? 'text-red-600 font-medium' : 'text-gray-500'}>
+                      {remaining.text}
+                    </div>
                   </div>
                 </div>
               </Link>

@@ -6,7 +6,8 @@ import type { MarketStatus } from '@/db/types';
 
 const STATUS_LABELS: Record<MarketStatus, string> = {
   candidate: 'Candidatos',
-  review: 'En revisión',
+  processing: 'Procesando',
+  proposal: 'Propuestas',
   approved: 'Aprobados',
   open: 'Abiertos',
   closed: 'Cerrados',

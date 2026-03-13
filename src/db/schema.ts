@@ -8,7 +8,7 @@ import {
   jsonb,
   index,
 } from 'drizzle-orm/pg-core';
-import type { SourceContext, Review, Resolution } from './types';
+import type { SourceContext, Review, Resolution, Iteration, SourcingStep, MarketEventType } from './types';
 
 export const markets = pgTable(
   'markets',
@@ -33,6 +33,7 @@ export const markets = pgTable(
     outcome: varchar('outcome', { length: 5 }),
     sourceContext: jsonb('source_context').notNull().$type<SourceContext>(),
     review: jsonb('review').$type<Review>(),
+    iterations: jsonb('iterations').$type<Iteration[]>(),
     resolution: jsonb('resolution').$type<Resolution>(),
   },
   (table) => [
@@ -40,3 +41,31 @@ export const markets = pgTable(
     index('markets_status_created_idx').on(table.status, table.createdAt),
   ],
 );
+
+export const marketEvents = pgTable(
+  'market_events',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    marketId: uuid('market_id').notNull().references(() => markets.id),
+    type: varchar('type', { length: 30 }).notNull().$type<MarketEventType>(),
+    iteration: integer('iteration'),
+    detail: jsonb('detail').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('market_events_market_idx').on(table.marketId, table.createdAt),
+  ],
+);
+
+export const sourcingRuns = pgTable('sourcing_runs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  status: varchar('status', { length: 20 }).notNull().default('running'),
+  currentStep: varchar('current_step', { length: 30 }).notNull().default('check-cap'),
+  steps: jsonb('steps').notNull().default([]).$type<SourcingStep[]>(),
+  signalsCount: integer('signals_count'),
+  candidatesGenerated: integer('candidates_generated'),
+  candidatesSaved: integer('candidates_saved'),
+  error: text('error'),
+  startedAt: timestamp('started_at').defaultNow().notNull(),
+  completedAt: timestamp('completed_at'),
+});

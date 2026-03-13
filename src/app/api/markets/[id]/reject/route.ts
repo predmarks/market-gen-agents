@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/client';
 import { markets } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { logMarketEvent } from '@/lib/market-events';
 
 export async function POST(
   request: NextRequest,
@@ -14,9 +15,9 @@ export async function POST(
     return NextResponse.json({ error: 'Market not found' }, { status: 404 });
   }
 
-  if (market.status !== 'review' && market.status !== 'candidate') {
+  if (market.status !== 'proposal' && market.status !== 'candidate') {
     return NextResponse.json(
-      { error: `Cannot reject a market with status "${market.status}". Must be "review" or "candidate".` },
+      { error: `Cannot reject a market with status "${market.status}". Must be "proposal" or "candidate".` },
       { status: 400 },
     );
   }
@@ -28,6 +29,10 @@ export async function POST(
     .set({ status: 'rejected' })
     .where(eq(markets.id, id))
     .returning();
+
+  await logMarketEvent(id, 'human_rejected', {
+    detail: body.reason ? { reason: body.reason } : undefined,
+  });
 
   return NextResponse.json({ ...updated, rejectionReason: body.reason });
 }

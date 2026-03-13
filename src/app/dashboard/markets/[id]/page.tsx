@@ -3,9 +3,9 @@ export const dynamic = 'force-dynamic';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { db } from '@/db/client';
-import { markets } from '@/db/schema';
-import { eq } from 'drizzle-orm';
-import type { Market } from '@/db/types';
+import { markets, marketEvents } from '@/db/schema';
+import { eq, asc } from 'drizzle-orm';
+import type { Market, Iteration, MarketEventType } from '@/db/types';
 import { toDeployableMarket } from '@/lib/export';
 import { StatusBadge } from '../../_components/StatusBadge';
 import { TimingSafetyIndicator } from '../../_components/TimingSafetyIndicator';
@@ -32,7 +32,10 @@ interface Props {
 
 export default async function MarketDetailPage({ params }: Props) {
   const { id } = await params;
-  const [market] = await db.select().from(markets).where(eq(markets.id, id));
+  const [[market], events] = await Promise.all([
+    db.select().from(markets).where(eq(markets.id, id)),
+    db.select().from(marketEvents).where(eq(marketEvents.marketId, id)).orderBy(asc(marketEvents.createdAt)),
+  ]);
 
   if (!market) notFound();
 
@@ -40,6 +43,7 @@ export default async function MarketDetailPage({ params }: Props) {
   const review = market.review as Market['review'];
   const resolution = market.resolution as Market['resolution'];
   const sourceContext = market.sourceContext as Market['sourceContext'];
+  const iterations = (market.iterations as Iteration[] | null) ?? [];
 
   return (
     <div className="max-w-3xl">
@@ -56,6 +60,7 @@ export default async function MarketDetailPage({ params }: Props) {
           marketId={market.id}
           status={market.status as Market['status']}
           review={review ?? null}
+          iterations={iterations.length > 0 ? iterations : null}
         />
       </div>
 
@@ -151,10 +156,81 @@ export default async function MarketDetailPage({ params }: Props) {
         </div>
       </div>
 
+      {/* Iteration History */}
+      {iterations.length > 0 && (
+        <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
+          <h2 className="text-lg font-bold mb-4">Historial de iteraciones</h2>
+          <div className="space-y-4">
+            {iterations.map((iter) => (
+              <details key={iter.version} className="border border-gray-100 rounded-lg">
+                <summary className="px-4 py-3 cursor-pointer hover:bg-gray-50 flex items-center justify-between">
+                  <span className="font-medium text-sm">
+                    Versión {iter.version}
+                  </span>
+                  <span className="text-sm text-gray-500">
+                    Score: {iter.review.scores.overallScore.toFixed(1)}/10
+                  </span>
+                </summary>
+                <div className="px-4 pb-4 space-y-3">
+                  <div className="text-sm">
+                    <strong>Título:</strong> {iter.market.title}
+                  </div>
+                  {iter.feedback && (
+                    <div>
+                      <strong className="text-sm">Feedback:</strong>
+                      <pre className="mt-1 text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded p-2">
+                        {iter.feedback}
+                      </pre>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>Ambigüedad: {iter.review.scores.ambiguity}/10</div>
+                    <div>Timing: {iter.review.scores.timingSafety}/10</div>
+                    <div>Actualidad: {iter.review.scores.timeliness}/10</div>
+                    <div>Volumen: {iter.review.scores.volumePotential}/10</div>
+                  </div>
+                  {iter.review.hardRuleResults.filter((r) => !r.passed).length > 0 && (
+                    <div className="text-xs">
+                      <strong>Reglas fallidas:</strong>{' '}
+                      {iter.review.hardRuleResults
+                        .filter((r) => !r.passed)
+                        .map((r) => r.ruleId)
+                        .join(', ')}
+                    </div>
+                  )}
+                </div>
+              </details>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Activity Timeline */}
+      {events.length > 0 && (
+        <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
+          <h2 className="text-lg font-bold mb-4">Actividad</h2>
+          <ul className="border-l-2 border-gray-200 ml-2 space-y-0">
+            {events.map((event) => (
+              <li key={event.id} className="relative pl-5 py-1.5">
+                <span className="absolute -left-[5px] top-2.5 w-2 h-2 rounded-full bg-gray-400" />
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs text-gray-400 shrink-0 font-mono">
+                    {formatEventTime(event.createdAt)}
+                  </span>
+                  <span className="text-sm text-gray-700">
+                    {formatEvent(event.type as MarketEventType, event.iteration, event.detail as Record<string, unknown> | null)}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Review Section */}
       {review && (
         <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-bold mb-4">Revisión</h2>
+          <h2 className="text-lg font-bold mb-4">Revisión final</h2>
 
           {/* Scores */}
           {review.scores.overallScore > 0 && (
@@ -197,7 +273,7 @@ export default async function MarketDetailPage({ params }: Props) {
                   .filter((r) => !r.passed)
                   .map((r) => (
                     <div key={r.ruleId} className="text-sm flex gap-2">
-                      <span>\u26A0\uFE0F</span>
+                      <span>{'\u26A0\uFE0F'}</span>
                       <span>
                         <strong>{r.ruleId}</strong>: {r.explanation}
                       </span>
@@ -247,41 +323,6 @@ export default async function MarketDetailPage({ params }: Props) {
               ))}
             </div>
           )}
-
-          {/* Suggested Rewrites */}
-          {review.suggestedRewrites &&
-            Object.values(review.suggestedRewrites).some(Boolean) && (
-              <div className="mb-4">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">
-                  Reescrituras sugeridas
-                </h3>
-                <div className="bg-yellow-50 rounded-lg p-3 text-sm space-y-2">
-                  {review.suggestedRewrites.title && (
-                    <div>
-                      <strong>Título:</strong> {review.suggestedRewrites.title}
-                    </div>
-                  )}
-                  {review.suggestedRewrites.description && (
-                    <div>
-                      <strong>Descripción:</strong>{' '}
-                      {review.suggestedRewrites.description}
-                    </div>
-                  )}
-                  {review.suggestedRewrites.resolutionCriteria && (
-                    <div>
-                      <strong>Criterios:</strong>{' '}
-                      {review.suggestedRewrites.resolutionCriteria}
-                    </div>
-                  )}
-                  {review.suggestedRewrites.contingencies && (
-                    <div>
-                      <strong>Contingencias:</strong>{' '}
-                      {review.suggestedRewrites.contingencies}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
         </div>
       )}
 
@@ -300,14 +341,87 @@ export default async function MarketDetailPage({ params }: Props) {
       )}
 
       {/* Deployable JSON Preview */}
-      <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-bold mb-3">Preview: JSON desplegable</h2>
-        <pre className="bg-gray-50 rounded-lg p-4 text-sm overflow-x-auto">
-          {JSON.stringify(deployable, null, 2)}
-        </pre>
-      </div>
+      {(market.status === 'proposal' || market.status === 'approved') && (
+        <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
+          <h2 className="text-lg font-bold mb-3">Preview: JSON desplegable</h2>
+          <pre className="bg-gray-50 rounded-lg p-4 text-sm overflow-x-auto">
+            {JSON.stringify(deployable, null, 2)}
+          </pre>
+        </div>
+      )}
     </div>
   );
+}
+
+function formatEventTime(date: Date): string {
+  return new Intl.DateTimeFormat('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  }).format(date);
+}
+
+const EVENT_LABELS: Record<MarketEventType, string> = {
+  pipeline_started: 'Pipeline iniciado',
+  pipeline_resumed: 'Pipeline reanudado',
+  data_verified: 'Datos verificados',
+  rules_checked: 'Reglas verificadas',
+  scored: 'Scoring',
+  improved: 'Mejora aplicada',
+  pipeline_proposed: 'Propuesto',
+  pipeline_rejected: 'Rechazado por pipeline',
+  human_approved: 'Aprobado',
+  human_rejected: 'Rechazado',
+  human_edited: 'Editado',
+  status_changed: 'Estado cambiado',
+};
+
+function formatEvent(
+  type: MarketEventType,
+  iteration: number | null,
+  detail: Record<string, unknown> | null,
+): string {
+  const label = EVENT_LABELS[type] ?? type;
+  const parts: string[] = [];
+
+  if (iteration) parts.push(`v${iteration}`);
+  parts.push(label);
+
+  if (detail) {
+    switch (type) {
+      case 'data_verified':
+        parts.push(`(${detail.claimsCount} claims, ${detail.inaccurateCount} inexactos)`);
+        break;
+      case 'rules_checked': {
+        const failed = detail.failedHard as string[] | undefined;
+        if (failed?.length) parts.push(`(${failed.join(', ')} fallidas)`);
+        else parts.push('(todas ok)');
+        break;
+      }
+      case 'scored':
+        parts.push(`${detail.overallScore}/10`);
+        break;
+      case 'pipeline_proposed':
+        parts.push(`(score: ${detail.score})`);
+        break;
+      case 'pipeline_rejected':
+        if (detail.reason) parts.push(`— ${detail.reason}`);
+        break;
+      case 'human_rejected':
+        if (detail.reason) parts.push(`— ${detail.reason}`);
+        break;
+      case 'human_edited': {
+        const fields = detail.fields as string[] | undefined;
+        if (fields?.length) parts.push(`(${fields.join(', ')})`);
+        if (detail.approved) parts.push('+ aprobado');
+        break;
+      }
+    }
+  }
+
+  return parts.join(' ');
 }
 
 function Section({

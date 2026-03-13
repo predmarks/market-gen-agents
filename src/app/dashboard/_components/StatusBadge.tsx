@@ -2,7 +2,8 @@ import type { MarketStatus } from '@/db/types';
 
 const STATUS_STYLES: Record<MarketStatus, string> = {
   candidate: 'bg-blue-100 text-blue-800',
-  review: 'bg-yellow-100 text-yellow-800',
+  processing: 'bg-amber-100 text-amber-800',
+  proposal: 'bg-blue-100 text-blue-800',
   approved: 'bg-indigo-100 text-indigo-800',
   open: 'bg-emerald-100 text-emerald-800',
   closed: 'bg-gray-100 text-gray-800',
@@ -12,7 +13,8 @@ const STATUS_STYLES: Record<MarketStatus, string> = {
 
 const STATUS_LABELS: Record<MarketStatus, string> = {
   candidate: 'Candidato',
-  review: 'En revisión',
+  processing: 'Procesando',
+  proposal: 'Propuesta',
   approved: 'Aprobado',
   open: 'Abierto',
   closed: 'Cerrado',

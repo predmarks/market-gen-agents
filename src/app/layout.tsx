@@ -37,13 +37,25 @@ export default function RootLayout({
               href="/dashboard"
               className="text-sm text-gray-600 hover:text-gray-900"
             >
-              Mercados
+              Propuestas
+            </Link>
+            <Link
+              href="/dashboard/open"
+              className="text-sm text-gray-600 hover:text-gray-900"
+            >
+              Abiertos
             </Link>
             <Link
               href="/dashboard/resolution"
               className="text-sm text-gray-600 hover:text-gray-900"
             >
               Resolución
+            </Link>
+            <Link
+              href="/dashboard/monitoring"
+              className="text-sm text-gray-600 hover:text-gray-900"
+            >
+              Monitoreo
             </Link>
           </div>
         </nav>

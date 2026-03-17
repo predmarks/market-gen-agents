@@ -13,6 +13,7 @@ const STATUS_LABELS: Record<MarketStatus, string> = {
   closed: 'Cerrados',
   resolved: 'Resueltos',
   rejected: 'Rechazados',
+  cancelled: 'Cancelados',
 };
 
 export function MarketFilters() {

@@ -67,9 +67,26 @@ export function MarketActions({ marketId, status, iterations }: MarketActionsPro
         )}
 
         {status === 'processing' && (
-          <p className="text-sm text-amber-700 bg-amber-50 px-4 py-2 rounded-md">
-            Procesando… {iterationCount > 0 ? `(iteración ${iterationCount})` : ''}
-          </p>
+          <>
+            <p className="text-sm text-amber-700 bg-amber-50 px-4 py-2 rounded-md">
+              Procesando… {iterationCount > 0 ? `(iteración ${iterationCount})` : ''}
+            </p>
+            <ActionButton
+              label="Cancelar"
+              loading={loading === 'cancel'}
+              onClick={() => handleAction('cancel')}
+              variant="danger"
+            />
+          </>
+        )}
+
+        {status === 'cancelled' && (
+          <ActionButton
+            label="Reanudar"
+            loading={loading === 'resume'}
+            onClick={() => handleAction('resume')}
+            variant="primary"
+          />
         )}
 
         {status === 'proposal' && (

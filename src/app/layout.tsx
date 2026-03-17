@@ -37,6 +37,12 @@ export default function RootLayout({
               href="/dashboard"
               className="text-sm text-gray-600 hover:text-gray-900"
             >
+              Monitoreo
+            </Link>
+            <Link
+              href="/dashboard/proposals"
+              className="text-sm text-gray-600 hover:text-gray-900"
+            >
               Propuestas
             </Link>
             <Link
@@ -52,10 +58,10 @@ export default function RootLayout({
               Resolución
             </Link>
             <Link
-              href="/dashboard/monitoring"
+              href="/dashboard/suggest"
               className="text-sm text-gray-600 hover:text-gray-900"
             >
-              Monitoreo
+              Sugerir
             </Link>
           </div>
         </nav>

@@ -6,7 +6,7 @@ import { generateMarkets } from './generator';
 import { deduplicateCandidates } from './deduplication';
 import type { GeneratedCandidate } from './types';
 
-const CANDIDATE_CAP = 50;
+export const CANDIDATE_CAP = 5;
 
 export async function runSourcing(): Promise<{ candidateIds: string[] }> {
   // Check candidate cap

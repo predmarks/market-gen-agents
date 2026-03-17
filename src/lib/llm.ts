@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-const client = new Anthropic({ maxRetries: 5 });
+const client = new Anthropic({ maxRetries: 2 });
 
 const MODEL = 'claude-sonnet-4-20250514';
 const MAX_TOKENS = 16000;

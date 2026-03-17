@@ -64,7 +64,13 @@ function marketToSnapshot(market: MarketRecord): MarketSnapshot {
 }
 
 export const reviewJob = inngest.createFunction(
-  { id: 'review-pipeline', retries: 2, concurrency: { limit: 5 } },
+  {
+    id: 'review-pipeline',
+    retries: 5,
+    concurrency: { limit: 1 },
+    throttle: { limit: 1, period: '2m' },
+    cancelOn: [{ event: 'market/review.cancel', if: 'async.data.id == event.data.id' }],
+  },
   { event: 'market/candidate.created' },
   async ({ event, step }) => {
     const marketId = event.data.id as string;

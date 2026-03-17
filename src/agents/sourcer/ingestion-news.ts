@@ -4,7 +4,7 @@ import type { SourceSignal } from './types';
 
 const parser = new Parser({ timeout: 10_000 });
 const MAX_ITEMS_PER_FEED = 15;
-const MAX_TOTAL_SIGNALS = 80;
+const MAX_TOTAL_SIGNALS = 10;
 const MAX_AGE_MS = 48 * 60 * 60 * 1000; // 48 hours
 
 export async function ingestNews(): Promise<SourceSignal[]> {

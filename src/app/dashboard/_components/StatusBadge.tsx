@@ -9,6 +9,7 @@ const STATUS_STYLES: Record<MarketStatus, string> = {
   closed: 'bg-gray-100 text-gray-800',
   resolved: 'bg-purple-100 text-purple-800',
   rejected: 'bg-red-100 text-red-800',
+  cancelled: 'bg-orange-100 text-orange-800',
 };
 
 const STATUS_LABELS: Record<MarketStatus, string> = {
@@ -20,6 +21,7 @@ const STATUS_LABELS: Record<MarketStatus, string> = {
   closed: 'Cerrado',
   resolved: 'Resuelto',
   rejected: 'Rechazado',
+  cancelled: 'Cancelado',
 };
 
 export function StatusBadge({ status }: { status: MarketStatus }) {

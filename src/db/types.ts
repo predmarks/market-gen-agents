@@ -7,6 +7,7 @@ export const MARKET_STATUSES = [
   'closed',
   'resolved',
   'rejected',
+  'cancelled',
 ] as const;
 export type MarketStatus = (typeof MARKET_STATUSES)[number];
 
@@ -140,6 +141,7 @@ export const EVENT_TYPES = [
   'data_verified', 'rules_checked', 'scored', 'improved',
   'pipeline_proposed', 'pipeline_rejected',
   'human_approved', 'human_rejected', 'human_edited',
+  'pipeline_cancelled',
   'status_changed',
 ] as const;
 export type MarketEventType = (typeof EVENT_TYPES)[number];

@@ -20,11 +20,18 @@ Design implications:
 ### Market lifecycle
 
 ```
-candidate → review → approved → open → closed → resolved
-                  ↘ rejected
+candidate → processing → proposal → approved → open → closed → resolved
+                ↓            ↘ rejected
+            cancelled
 ```
 
-No VOID state. Markets always resolve Si or No.
+- `candidate`: awaiting review (fresh or re-queued after cancellation)
+- `processing`: review pipeline running in Inngest
+- `proposal` / `rejected`: pipeline output, awaiting human decision
+- `cancelled`: pipeline cancelled manually or due to stale processing
+- `approved` → `open` → `closed` → `resolved`: deployed market lifecycle
+
+No VOID state. Markets always resolve Si or No. Markets are never refunded or declared invalid.
 
 ### Deployment format (final output)
 
@@ -119,7 +126,7 @@ Internally, markets use a richer schema with separate fields. The `description` 
 ```typescript
 interface Market {
   id: string;
-  status: 'candidate' | 'review' | 'approved' | 'open' | 'closed' | 'resolved' | 'rejected';
+  status: 'candidate' | 'processing' | 'proposal' | 'rejected' | 'cancelled' | 'approved' | 'open' | 'closed' | 'resolved';
 
   // Core content (Spanish) — kept separate for agent validation
   title: string;                    // Maps to `name` on export
@@ -407,6 +414,11 @@ export const SOFT_RULES: Rule[] = [
 
 ### Standard contingency clauses
 
+**CRITICAL RULES:**
+- Markets NEVER refund bets or declare results as "invalid"
+- Markets ALWAYS resolve as "Sí" or "No", no exceptions
+- If an event is cancelled, postponed indefinitely, or doesn't occur → resolves as "No"
+
 Every market description should include applicable contingency clauses. These are derived from real edge cases encountered in production:
 
 ```typescript
@@ -550,7 +562,7 @@ Generate high-quality Argentine market candidates from local data sources, in Sp
 Ingestion (fetch signals) → LLM generation → Deduplication → Candidate queue
 ```
 
-Runs on-demand (triggered from dashboard when market slots open up) or optionally on a cron (2-3x/week). Cap: 50 candidates in queue.
+Runs on-demand from the monitoring dashboard (button: "Sugerir N mercados nuevos"). Configurable `CANDIDATE_CAP` (currently 5 for development, target 50 for production).
 
 ### Ingestion layer
 
@@ -988,93 +1000,97 @@ Markets past `endTimestamp` where the YES condition was not met → auto-flag as
 ## Tech stack (Vercel-deployable)
 
 ```
-Framework:         Next.js 14+ (App Router)
-Deployment:        Vercel (Pro plan — 60s function timeout)
-Database:          Vercel Postgres (or Neon/Supabase)
-ORM:               Drizzle
-Job orchestration: Inngest (free tier — handles retries, step functions, events)
-LLM:               Claude API (claude-sonnet-4-20250514 for all agents)
-Web search:        Anthropic tool-use web search (in Claude API calls)
-Embeddings:        Voyage AI or OpenAI text-embedding-3-small
-Notifications:     Slack webhook + optional WhatsApp/Telegram
-Auth:              NextAuth.js (internal dashboard)
+Framework:         Next.js 16 (App Router) + TypeScript strict + Tailwind v4
+Deployment:        Vercel
+Database:          Supabase Postgres
+ORM:               Drizzle (postgres.js driver)
+Job orchestration: Inngest (step functions, throttle, cancelOn, concurrency)
+LLM:               Claude API (claude-sonnet-4-20250514, maxRetries: 2)
+Web search:        Anthropic tool-use web search (web_search_20250305)
+Notifications:     TODO (Slack webhook planned)
 ```
 
 ### Why this stack
 
-- **Vercel + Next.js**: Zero infra management. Dashboard UI + API routes + cron in one project.
-- **Inngest over raw Vercel Cron**: Vercel Cron triggers functions but doesn't handle retries, queuing, or step functions. Inngest (free tier covers this scale) gives reliable retries, step functions (critical for sourcing pipeline which exceeds 60s), and event-driven triggers.
-- **Claude Sonnet for all agents**: Best reasoning-to-cost ratio. Strong Spanish. Structured output support. If budget allows, upgrade the Reviewer's rules checker to Opus.
-- **Not Grok**: X/Twitter data is accessed via X API regardless of LLM. Claude is significantly better at structured reasoning, rule-checking, and Spanish generation.
+- **Vercel + Next.js**: Zero infra management. Dashboard UI + API routes in one project.
+- **Inngest over raw Vercel Cron**: Vercel Cron triggers functions but doesn't handle retries, queuing, or step functions. Inngest gives reliable retries, step functions (critical for pipelines exceeding 60s), event-driven triggers, throttling, and cancellation.
+- **Claude Sonnet for all agents**: Best reasoning-to-cost ratio. Strong Spanish. Structured output via tool_use.
 
 ### Project structure
 
 ```
-predmarks-agents/
-├── app/
-│   ├── api/
-│   │   ├── markets/
-│   │   │   ├── route.ts                  # GET list, POST create
-│   │   │   └── [id]/
-│   │   │       ├── route.ts              # GET detail, PATCH update
-│   │   │       ├── approve/route.ts      # POST approve
-│   │   │       ├── reject/route.ts       # POST reject
-│   │   │       ├── resolve/route.ts      # POST confirm resolution
-│   │   │       └── edit/route.ts         # POST edit + approve
-│   │   ├── export/[id]/route.ts          # GET deployable JSON
-│   │   └── inngest/route.ts              # Inngest webhook
-│   ├── dashboard/
-│   │   ├── page.tsx                      # Review queue
-│   │   ├── markets/[id]/page.tsx         # Detail + approve/reject
-│   │   └── resolution/page.tsx           # Resolution queue
-│   └── layout.tsx
+predmarks-market-agents/
 ├── src/
+│   ├── app/
+│   │   ├── layout.tsx                        # Root layout with nav
+│   │   ├── api/
+│   │   │   ├── markets/
+│   │   │   │   ├── route.ts                  # GET list, POST create
+│   │   │   │   ├── expand/route.ts           # POST — LLM fills missing market fields
+│   │   │   │   └── [id]/
+│   │   │   │       ├── route.ts              # GET detail
+│   │   │   │       ├── approve/route.ts      # POST approve
+│   │   │   │       ├── reject/route.ts       # POST reject
+│   │   │   │       ├── resolve/route.ts      # POST confirm resolution
+│   │   │   │       ├── edit/route.ts         # POST edit + approve
+│   │   │   │       ├── cancel/route.ts       # POST cancel processing
+│   │   │   │       └── resume/route.ts       # POST resume cancelled
+│   │   │   ├── review/[id]/route.ts          # POST trigger review pipeline
+│   │   │   ├── export/[id]/route.ts          # GET deployable JSON
+│   │   │   ├── monitoring/
+│   │   │   │   └── activity/route.ts         # GET market monitor data + counts
+│   │   │   ├── sourcing/
+│   │   │   │   ├── route.ts                  # POST trigger sourcing
+│   │   │   │   └── status/route.ts           # GET sourcing run history
+│   │   │   └── inngest/route.ts              # Inngest webhook
+│   │   └── dashboard/
+│   │       ├── page.tsx                      # Monitoring (default view)
+│   │       ├── _components/                  # Shared: StatusBadge, TimingSafetyIndicator, MarketFilters
+│   │       ├── monitoring/
+│   │       │   ├── page.tsx                  # Monitoring (alternate route)
+│   │       │   └── _components/
+│   │       │       ├── MonitoringDashboard.tsx  # Filter cards, market list, actions
+│   │       │       └── SourcingPanel.tsx        # Trigger button + compact run log
+│   │       ├── proposals/page.tsx            # Proposals queue
+│   │       ├── markets/[id]/
+│   │       │   ├── page.tsx                  # Market detail + activity timeline
+│   │       │   └── _components/
+│   │       │       └── MarketActions.tsx      # Review/cancel/resume/approve/reject/resolve
+│   │       ├── open/page.tsx                 # Open markets
+│   │       ├── resolution/page.tsx           # Resolution queue
+│   │       └── suggest/page.tsx              # Manual market creation
 │   ├── agents/
 │   │   ├── sourcer/
-│   │   │   ├── ingestion.ts
-│   │   │   ├── ingestion-twitter.ts
-│   │   │   ├── ingestion-news.ts
-│   │   │   ├── ingestion-data.ts         # BCRA, INDEC, weather
-│   │   │   ├── generator.ts
-│   │   │   ├── deduplication.ts
-│   │   │   └── index.ts
-│   │   ├── reviewer/
-│   │   │   ├── data-verifier.ts
-│   │   │   ├── rules-checker.ts
-│   │   │   ├── scorer.ts
-│   │   │   ├── rewriter.ts
-│   │   │   └── index.ts
-│   │   └── resolver/
-│   │       ├── search-builder.ts
-│   │       ├── evaluator.ts
-│   │       ├── emergency-detector.ts
-│   │       └── index.ts
+│   │   │   ├── ingestion-news.ts             # RSS news ingestion
+│   │   │   ├── generator.ts                  # LLM market generation
+│   │   │   ├── deduplication.ts              # Embedding dedup
+│   │   │   └── index.ts                      # Pipeline orchestrator + CANDIDATE_CAP
+│   │   └── reviewer/
+│   │       ├── data-verifier.ts
+│   │       ├── rules-checker.ts
+│   │       ├── scorer.ts
+│   │       ├── rewriter.ts
+│   │       ├── index.ts
+│   │       └── types.ts                      # MarketRecord type
 │   ├── config/
-│   │   ├── rules.ts                      # Hard + soft rules (THE SKILL)
-│   │   ├── contingencies.ts              # Standard contingency templates
-│   │   ├── prompts.ts                    # All prompt templates
-│   │   ├── scoring.ts                    # Weights and thresholds
-│   │   └── sources.ts                    # Data source config
+│   │   ├── rules.ts                          # H1-H9 hard rules, S1-S6 soft rules
+│   │   ├── contingencies.ts                  # Standard contingency templates
+│   │   └── scoring.ts                        # Weights and thresholds
 │   ├── db/
-│   │   ├── schema.ts                     # Drizzle schema
-│   │   ├── migrations/
-│   │   └── client.ts
+│   │   ├── schema.ts                         # markets + marketEvents + sourcingRuns tables
+│   │   ├── types.ts                          # All shared types (Market, Review, EventTypes, etc.)
+│   │   └── client.ts                         # Drizzle client (postgres.js driver)
 │   ├── lib/
-│   │   ├── llm.ts                        # Claude API wrapper
-│   │   ├── search.ts                     # Web search wrapper
-│   │   ├── embeddings.ts
-│   │   ├── notifications.ts              # Slack alerts
-│   │   ├── x-api.ts                      # Twitter/X client
-│   │   └── export.ts                     # toDeployableMarket()
+│   │   ├── llm.ts                            # Claude API wrapper (maxRetries: 2)
+│   │   ├── market-events.ts                  # logMarketEvent() helper
+│   │   └── export.ts                         # toDeployableMarket()
 │   └── inngest/
 │       ├── client.ts
-│       ├── sourcing-job.ts               # On-demand or cron 2-3x/week
-│       ├── review-job.ts                 # Event: on candidate.created
-│       └── resolution-job.ts             # Cron: tiered 6h/1h/15min
+│       ├── sourcing-job.ts                   # On-demand sourcing pipeline
+│       └── review-job.ts                     # Event-driven review with throttle + cancelOn
 ├── drizzle.config.ts
-├── vercel.json
 ├── package.json
-└── .env.local
+└── .env                                      # POSTGRES_URL + ANTHROPIC_API_KEY
 ```
 
 ### Inngest job orchestration
@@ -1083,44 +1099,42 @@ predmarks-agents/
 // src/inngest/sourcing-job.ts
 export const sourcingJob = inngest.createFunction(
   { id: 'sourcing-pipeline' },
-  [
-    { cron: '0 9 * * 1,3,5' },           // Optional: Mon/Wed/Fri 9am UTC
-    { event: 'market/sourcing.requested' } // On-demand: triggered from dashboard
-  ],
-  async ({ step }) => {
+  { event: 'market/sourcing.requested' }, // On-demand from dashboard
+  async ({ event, step }) => {
     // Each step is a separate function invocation (<60s each)
-    const signals = await step.run('ingest', () => ingestAllSources());
+    // Steps tracked in sourcingRuns table with step-by-step progress
+    const signals = await step.run('ingest', () => ingestSignals());
     const candidates = await step.run('generate', () => generateMarkets(signals));
     const unique = await step.run('dedup', () => deduplicateCandidates(candidates));
     await step.run('save', () => saveCandidates(unique));
 
     // Trigger review for each new candidate
-    for (const c of unique) {
-      await inngest.send({ name: 'market/candidate.created', data: { id: c.id } });
-    }
+    await step.run('trigger-reviews', () => {
+      for (const c of unique) {
+        inngest.send({ name: 'market/candidate.created', data: { id: c.id } });
+      }
+    });
   }
 );
 
 // src/inngest/review-job.ts
 export const reviewJob = inngest.createFunction(
-  { id: 'review-pipeline' },
-  { event: 'market/candidate.created' },  // Event-driven
+  {
+    id: 'review-pipeline',
+    retries: 5,
+    concurrency: { limit: 1 },              // Only 1 review at a time
+    throttle: { limit: 1, period: '2m' },    // Max 1 start per 2 min (rate limit protection)
+    cancelOn: [{                             // Cancel via event from dashboard
+      event: 'market/review.cancel',
+      if: 'async.data.id == event.data.id',
+    }],
+  },
+  { event: 'market/candidate.created' },
   async ({ event, step }) => {
-    const market = await step.run('load', () => db.markets.findById(event.data.id));
-    const verification = await step.run('verify', () => verifyData(market));
-    const rules = await step.run('check-rules', () => checkRules(market, verification));
-
-    if (rules.rejected) {
-      await step.run('reject', () => rejectMarket(market, rules));
-      return;
-    }
-
-    const scores = await step.run('score', () => scoreMarket(market, verification));
-    const final = scores.recommendation === 'rewrite_then_publish'
-      ? await step.run('rewrite', () => rewriteMarket(market, scores))
-      : market;
-
-    await step.run('surface', () => surfaceForReview(final, verification, rules, scores));
+    // Iterative pipeline: verify → check rules → score → (rewrite → re-check → re-score) → propose/reject
+    // Supports resume: loads iteration state from DB, skips completed iterations
+    // Emits marketEvents at each step for monitoring dashboard
+    // Max 3 iterations of improve → re-check → re-score before final decision
   }
 );
 
@@ -1173,6 +1187,38 @@ export const urgentResolutionJob = inngest.createFunction(
 
 ## Human review dashboard
 
+### Monitoring (default view at `/dashboard`)
+
+The monitoring page is the operational hub. It shows:
+
+1. **Header** with "Sugerir N mercados nuevos" button (triggers sourcing pipeline)
+2. **Filter cards** — clickable status cards showing counts:
+   - "En revisión" (candidate + processing combined)
+   - "Propuestas", "Abiertos", "Rechazados", "Cancelados"
+   - Clicking filters the market list; clicking again clears the filter
+3. **Market list** — each row shows:
+   - Status dot (color-coded, animated pulse for processing)
+   - Title (links to detail page)
+   - Status label + context detail (pipeline step for processing, score for proposals, "X iteraciones previas" for re-candidates)
+   - Inline action buttons: "Revisar" for candidates, "Cancelar" for processing, "Reanudar" for cancelled/stale
+   - Elapsed timer (live amber for processing, frozen gray for completed)
+   - Category
+4. **Sourcing log** — compact expandable run history at the bottom
+   - One-line summaries: status + date + signal/candidate counts
+   - Click to expand step-by-step detail
+
+Polling: 5s when processing markets exist, 30s otherwise. Live timer ticks every 1s.
+
+Stale detection: processing markets with no events in 5+ min are flagged as "Estancado" with a resume button (Inngest job likely died).
+
+### Market detail page
+
+Full market info + activity timeline showing all pipeline events:
+- `pipeline_started`, `pipeline_resumed`, `data_verified`, `rules_checked`, `scored`, `improved`, `pipeline_proposed`, `pipeline_rejected`, `pipeline_cancelled`
+- Human actions: `human_approved`, `human_rejected`, `human_edited`
+
+Events are logged via `logMarketEvent()` at each pipeline step and API action.
+
 ### Review queue
 
 Each candidate card shows everything needed to approve in <2 minutes:
@@ -1222,19 +1268,61 @@ Each candidate card shows everything needed to approve in <2 minutes:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/markets?status=review` | Candidates for review, sorted by score |
-| GET | `/api/markets?status=open` | Currently open markets |
-| GET | `/api/markets?status=flagged` | Markets flagged for resolution |
+| GET | `/api/markets` | List markets, POST create |
 | GET | `/api/markets/:id` | Full detail with review, verification, scores |
 | POST | `/api/markets/:id/approve` | Approve → deploy (moves to open) |
 | POST | `/api/markets/:id/reject` | Reject with reason |
 | POST | `/api/markets/:id/edit` | Human edits then approves |
 | POST | `/api/markets/:id/resolve` | Confirm resolution (Si or No) |
+| POST | `/api/markets/:id/cancel` | Cancel processing → cancelled (sends Inngest cancel event) |
+| POST | `/api/markets/:id/resume` | Resume cancelled → candidate (re-triggers pipeline) |
+| POST | `/api/markets/expand` | LLM fills missing fields for manual market creation |
+| POST | `/api/review/:id` | Trigger review pipeline for a candidate |
 | GET | `/api/export/:id` | Get deployable JSON for a market |
+| GET | `/api/monitoring/activity` | Market monitor data with counts (supports `?status=` filter, comma-separated) |
+| POST | `/api/sourcing` | Trigger sourcing pipeline |
+| GET | `/api/sourcing/status` | Sourcing run history + candidateCap |
 
 ---
 
 ## Observability
+
+### Market events (audit trail)
+
+Every state transition and pipeline step is logged to the `market_events` table:
+
+```typescript
+const EVENT_TYPES = [
+  'pipeline_started', 'pipeline_resumed',
+  'data_verified', 'rules_checked', 'scored', 'improved',
+  'pipeline_proposed', 'pipeline_rejected',
+  'human_approved', 'human_rejected', 'human_edited',
+  'pipeline_cancelled',
+  'status_changed',
+] as const;
+```
+
+Each event includes: `marketId`, `type`, optional `iteration` number, optional `detail` (JSONB), and `createdAt` timestamp. Events are displayed in the market detail page's "Actividad" timeline and used by the monitoring dashboard for live pipeline step tracking and stale detection.
+
+### Sourcing runs
+
+Sourcing pipeline runs are tracked in the `sourcing_runs` table with step-by-step progress:
+
+```typescript
+interface SourcingStep {
+  name: string;    // 'check-cap' | 'ingest' | 'generate' | 'dedup' | 'save' | 'trigger-reviews'
+  status: string;  // 'pending' | 'running' | 'done' | 'error'
+  detail?: string;
+}
+```
+
+Each run tracks: `status`, `steps` (JSONB array), `signalsCount`, `candidatesGenerated`, `candidatesSaved`, `error`, timestamps.
+
+### Rate limit protection
+
+With a 30k input tokens/min limit on Claude API:
+- Review pipeline: `concurrency: 1` (one job at a time) + `throttle: 1 per 2m` (queued, not dropped)
+- Anthropic SDK: `maxRetries: 2` (combined with Inngest's 5 retries = max 10 attempts, prevents 5×5=25 cascading retries)
 
 ### Key metrics
 
@@ -1251,11 +1339,7 @@ Each candidate card shows everything needed to approve in <2 minutes:
 
 ### Audit log
 
-Every state transition:
-- Timestamp, actor (agent or human), previous → new state
-- Full LLM input/output (for prompt debugging)
-- Token usage and cost per call
-- Data verification results
+Every state transition is recorded in `market_events` (see above). Each event includes timestamp, type, iteration number, and detail JSONB. The monitoring dashboard and market detail page both read from this table for real-time visibility.
 
 ### Cost tracking
 
@@ -1283,33 +1367,33 @@ rather than running on a fixed schedule.
 
 ## Implementation roadmap
 
-### Phase 1: Foundation (week 1-2)
+### Phase 1: Foundation — DONE
 - Next.js project + Vercel deployment
-- Drizzle schema + Vercel Postgres
-- Claude API wrapper with structured output
-- Rules module (`rules.ts`, `contingencies.ts`)
-- Basic dashboard UI (list + detail views)
+- Drizzle schema + Supabase Postgres (markets, marketEvents, sourcingRuns tables)
+- Claude API wrapper with structured output (`callClaude`, `callClaudeWithSearch`)
+- Rules module (`rules.ts`, `contingencies.ts`, `scoring.ts`)
+- Dashboard UI (monitoring, detail, proposals, open, resolution, suggest pages)
 - `toDeployableMarket()` export function
 
-### Phase 2: Reviewer Agent (week 2-3)
-Build first — test with manually created candidates.
-- Data verification step (web search)
-- Hard rules checker
-- Quality scorer with timing safety
-- Rewrite pass
-- Dashboard: approve/reject/edit flow
+### Phase 2: Reviewer Agent — DONE
+- Data verification step (web search via Claude tool-use)
+- Hard rules checker (H1-H9)
+- Quality scorer with timing safety (weighted scoring)
+- Iterative rewrite pass (up to 3 iterations of improve → re-check → re-score)
+- Inngest step function with throttle, concurrency, cancelOn
+- Dashboard: approve/reject/edit/cancel/resume flow
 - Deployable JSON preview + export
+- Market events audit trail
 
-### Phase 3: Sourcer Agent (week 3-4)
-- RSS/news ingestion (6 publications)
-- X/Twitter ingestion
-- BCRA/INDEC data ingestion (current values)
-- Weather data ingestion (timeanddate.com)
-- LLM generation step
-- Embedding deduplication
-- Wire to Reviewer via Inngest events
+### Phase 3: Sourcer Agent — DONE
+- RSS/news ingestion (Argentine publications)
+- LLM generation step with deduplication
+- Sourcing runs tracked with step-by-step progress
+- On-demand trigger from monitoring dashboard
+- Configurable CANDIDATE_CAP
+- Wire to Reviewer via Inngest events (`market/candidate.created`)
 
-### Phase 4: Resolution Checker (week 4-5)
+### Phase 4: Resolution Checker — TODO
 - Search query builder
 - Resolution evaluator
 - Emergency settlement detector
@@ -1317,8 +1401,8 @@ Build first — test with manually created candidates.
 - Dashboard: resolution confirmation
 - Slack alerts
 
-### Phase 5: Polish (week 5-6)
-- Observability (metrics, audit, cost)
+### Phase 5: Polish — TODO
 - Prompt tuning from real results
 - Multiple-choice market support
 - Weather market pipeline optimization
+- Cron-based sourcing schedule

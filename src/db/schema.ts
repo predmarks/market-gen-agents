@@ -40,7 +40,7 @@ export const markets = pgTable(
     index('markets_status_idx').on(table.status),
     index('markets_status_created_idx').on(table.status, table.createdAt),
   ],
-);
+).enableRLS();
 
 export const marketEvents = pgTable(
   'market_events',
@@ -55,7 +55,7 @@ export const marketEvents = pgTable(
   (table) => [
     index('market_events_market_idx').on(table.marketId, table.createdAt),
   ],
-);
+).enableRLS();
 
 export const sourcingRuns = pgTable('sourcing_runs', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -68,4 +68,4 @@ export const sourcingRuns = pgTable('sourcing_runs', {
   error: text('error'),
   startedAt: timestamp('started_at').defaultNow().notNull(),
   completedAt: timestamp('completed_at'),
-});
+}).enableRLS();

@@ -375,6 +375,7 @@ const EVENT_LABELS: Record<MarketEventType, string> = {
   human_approved: 'Aprobado',
   human_rejected: 'Rechazado',
   human_edited: 'Editado',
+  pipeline_cancelled: 'Cancelado',
   status_changed: 'Estado cambiado',
 };
 

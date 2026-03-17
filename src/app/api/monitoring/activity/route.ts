@@ -1,0 +1,131 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/db/client';
+import { markets, marketEvents } from '@/db/schema';
+import { eq, desc, sql, inArray } from 'drizzle-orm';
+import type { Iteration, Review } from '@/db/types';
+
+export const dynamic = 'force-dynamic';
+
+const STALE_MS = 5 * 60 * 1000; // 5 minutes without events = stale
+
+interface MarketMonitorEntry {
+  id: string;
+  title: string;
+  status: string;
+  category: string;
+  createdAt: string;
+  completedAt: string | null;
+  iterationCount: number;
+  score: number | null;
+  currentStep: string | null;
+  stepTimestamp: string | null;
+  stale: boolean;
+}
+
+export async function GET(request: NextRequest) {
+  const filterStatus = request.nextUrl.searchParams.get('status');
+
+  // Always get counts (unfiltered)
+  const countRows = await db
+    .select({
+      status: markets.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(markets)
+    .groupBy(markets.status);
+
+  const counts: Record<string, number> = {};
+  for (const row of countRows) {
+    counts[row.status] = row.count;
+  }
+
+  // Fetch markets (filtered or all — supports comma-separated statuses)
+  const query = db
+    .select()
+    .from(markets)
+    .orderBy(desc(markets.createdAt))
+    .limit(50);
+
+  let rows;
+  if (filterStatus) {
+    const statuses = filterStatus.split(',');
+    rows = statuses.length > 1
+      ? await query.where(inArray(markets.status, statuses))
+      : await query.where(eq(markets.status, statuses[0]));
+  } else {
+    rows = await query;
+  }
+
+  // For processing markets, get their latest event
+  const processingIds = rows
+    .filter((m) => m.status === 'processing')
+    .map((m) => m.id);
+
+  const latestEvents = new Map<string, { type: string; iteration: number | null; createdAt: Date }>();
+
+  if (processingIds.length > 0) {
+    // Get latest event per market using a subquery approach
+    const events = await db
+      .select()
+      .from(marketEvents)
+      .where(inArray(marketEvents.marketId, processingIds))
+      .orderBy(desc(marketEvents.createdAt));
+
+    // Keep only the latest per market
+    for (const ev of events) {
+      if (!latestEvents.has(ev.marketId)) {
+        latestEvents.set(ev.marketId, {
+          type: ev.type,
+          iteration: ev.iteration,
+          createdAt: ev.createdAt,
+        });
+      }
+    }
+  }
+
+  const entries: MarketMonitorEntry[] = rows.map((m) => {
+    const iterations = (m.iterations as Iteration[] | null) ?? [];
+    const review = m.review as Review | null;
+    const latestEvent = latestEvents.get(m.id);
+
+    let currentStep: string | null = null;
+    let stepTimestamp: string | null = null;
+
+    if (m.status === 'processing' && latestEvent) {
+      currentStep = latestEvent.type;
+      if (latestEvent.iteration) {
+        currentStep += `:${latestEvent.iteration}`;
+      }
+      stepTimestamp = latestEvent.createdAt.toISOString();
+    }
+
+    // Detect stale processing markets (no events in 5+ min = Inngest job likely dead)
+    let stale = false;
+    if (m.status === 'processing') {
+      const lastActivity = latestEvent?.createdAt ?? m.createdAt;
+      stale = Date.now() - lastActivity.getTime() > STALE_MS;
+    }
+
+    // completedAt: use review timestamp for finished markets
+    let completedAt: string | null = null;
+    if (review?.reviewedAt && (m.status === 'proposal' || m.status === 'rejected')) {
+      completedAt = review.reviewedAt;
+    }
+
+    return {
+      id: m.id,
+      title: m.title,
+      status: m.status,
+      category: m.category,
+      createdAt: m.createdAt.toISOString(),
+      completedAt,
+      iterationCount: iterations.length,
+      score: review?.scores?.overallScore ?? null,
+      currentStep,
+      stepTimestamp,
+      stale,
+    };
+  });
+
+  return NextResponse.json({ markets: entries, counts });
+}

@@ -29,10 +29,11 @@ export function Nav() {
           Predmarks
         </Link>
 
-        {navLink('/dashboard/signals', 'Señales')}
         {navLink('/dashboard/topics', 'Temas')}
         {navLink('/dashboard/mercados', 'Mercados')}
-        {navLink('/dashboard/feedback', 'Feedback')}
+        {navLink('/dashboard/signals', 'Señales')}
+        {navLink('/dashboard/rules', 'Reglas')}
+        {navLink('/dashboard/activity', 'Log')}
 
         <form action={logout} className="ml-auto">
           <button

@@ -3,16 +3,17 @@ export const dynamic = 'force-dynamic';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { db } from '@/db/client';
-import { markets, marketEvents } from '@/db/schema';
-import { eq, asc } from 'drizzle-orm';
+import { markets, marketEvents, activityLog, topics, topicSignals, signals } from '@/db/schema';
+import { eq, asc, desc, inArray } from 'drizzle-orm';
 import type { Market, Iteration, MarketEventType } from '@/db/types';
 import { toDeployableMarket } from '@/lib/export';
 import { StatusBadge } from '../../_components/StatusBadge';
 import { TimingSafetyIndicator } from '../../_components/TimingSafetyIndicator';
 import { MarketActions } from './_components/MarketActions';
-import { HumanFeedback } from './_components/HumanFeedback';
+
 import { CopyJsonButton } from './_components/CopyJsonButton';
 import { Markdown } from '../../../_components/Markdown';
+import { ActivityCard } from '@/app/_components/ActivityCard';
 
 function formatTimestamp(ts: number): string {
   return new Intl.DateTimeFormat('es-AR', {
@@ -35,9 +36,10 @@ interface Props {
 
 export default async function MarketDetailPage({ params }: Props) {
   const { id } = await params;
-  const [[market], events] = await Promise.all([
+  const [[market], events, activity] = await Promise.all([
     db.select().from(markets).where(eq(markets.id, id)),
     db.select().from(marketEvents).where(eq(marketEvents.marketId, id)).orderBy(asc(marketEvents.createdAt)),
+    db.select().from(activityLog).where(eq(activityLog.entityId, id)).orderBy(desc(activityLog.createdAt)).limit(50),
   ]);
 
   if (!market) notFound();
@@ -46,17 +48,39 @@ export default async function MarketDetailPage({ params }: Props) {
   const review = market.review as Market['review'];
   const resolution = market.resolution as Market['resolution'];
   const sourceContext = market.sourceContext as Market['sourceContext'];
-  const iterations = (market.iterations as Iteration[] | null) ?? [];
 
-  const feedbackEvents = events.filter((e) => e.type === 'human_feedback');
-  const humanFeedback = feedbackEvents.map((e) => {
-    const detail = e.detail as Record<string, unknown> | null;
-    return {
-      text: (detail?.text as string) ?? '',
-      createdAt: e.createdAt.toISOString(),
-      conversation: (detail?.conversation as Array<{ role: 'user' | 'assistant'; content: string }>) ?? null,
-    };
-  });
+  // Resolve source topics for back-links
+  const sourceTopicIds = sourceContext?.topicIds ?? [];
+  const sourceTopics = sourceTopicIds.length > 0
+    ? await db.select({ id: topics.id, name: topics.name, slug: topics.slug }).from(topics).where(inArray(topics.id, sourceTopicIds))
+    : [];
+  // Fetch related signals through source topics
+  const rawSignals = sourceTopicIds.length > 0
+    ? await db
+        .select({
+          id: signals.id,
+          type: signals.type,
+          text: signals.text,
+          summary: signals.summary,
+          url: signals.url,
+          source: signals.source,
+          publishedAt: signals.publishedAt,
+        })
+        .from(topicSignals)
+        .innerJoin(signals, eq(topicSignals.signalId, signals.id))
+        .where(inArray(topicSignals.topicId, sourceTopicIds))
+        .orderBy(desc(signals.publishedAt))
+        .limit(60)
+    : [];
+  // Dedup by signal ID
+  const seen = new Set<string>();
+  const relatedSignals = rawSignals.filter((s) => {
+    if (seen.has(s.id)) return false;
+    seen.add(s.id);
+    return true;
+  }).slice(0, 30);
+
+  const iterations = (market.iterations as Iteration[] | null) ?? [];
 
   return (
     <div>
@@ -78,9 +102,7 @@ export default async function MarketDetailPage({ params }: Props) {
         />
       </div>
 
-      <div className="flex gap-6 items-start">
-      {/* Main content */}
-      <div className="flex-1 min-w-0 max-w-3xl">
+      <div className="max-w-3xl">
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
           <h1 className="text-xl font-bold">{market.title}</h1>
@@ -96,6 +118,35 @@ export default async function MarketDetailPage({ params }: Props) {
           </div>
         </div>
 
+        {sourceTopics.length > 0 && (
+          <div className="flex items-center gap-2 mb-4 text-xs text-gray-500">
+            <span>Tema{sourceTopics.length > 1 ? 's' : ''}:</span>
+            {sourceTopics.map((t, i) => (
+              <span key={t.id}>
+                {i > 0 && ', '}
+                <Link href={`/dashboard/topics/${t.slug}`} className="text-blue-600 hover:underline">{t.name}</Link>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Outcomes */}
+        {(() => {
+          const outcomes = (market.outcomes as string[]) ?? ['Si', 'No'];
+          const DOT_COLORS = ['bg-blue-400', 'bg-amber-400', 'bg-purple-400', 'bg-emerald-400', 'bg-rose-400', 'bg-cyan-400', 'bg-orange-400', 'bg-gray-400'];
+          return (
+            <div className="mb-4 space-y-0.5">
+              {outcomes.map((o: string, i: number) => (
+                <div key={o} className="flex items-center gap-1.5">
+                  <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${market.outcome === o ? 'bg-green-500' : DOT_COLORS[i % DOT_COLORS.length]}`} />
+                  <span className={`text-sm ${market.outcome === o ? 'font-semibold text-green-700' : 'text-gray-700'}`}>{o}</span>
+                  {market.outcome === o && <span className="text-[10px] text-green-500 ml-1">resultado</span>}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
         <div className="space-y-4">
           <Section title="Categoría">
             <span>{market.category}</span>
@@ -106,20 +157,6 @@ export default async function MarketDetailPage({ params }: Props) {
           <Section title="Descripción">
             <Markdown className="text-gray-700">{market.description}</Markdown>
           </Section>
-
-          <Section title="Criterios de resolución">
-            <p className="text-gray-700">{market.resolutionCriteria}</p>
-          </Section>
-
-          <Section title="Fuente de resolución">
-            <p className="text-gray-700">{market.resolutionSource}</p>
-          </Section>
-
-          {market.contingencies && (
-            <Section title="Contingencias">
-              <p className="text-gray-700">{market.contingencies}</p>
-            </Section>
-          )}
 
           <Section title="Cierre del mercado">
             <p className="text-gray-700">{formatTimestamp(market.endTimestamp)}</p>
@@ -146,55 +183,24 @@ export default async function MarketDetailPage({ params }: Props) {
             </Section>
           )}
 
-          {(() => {
-            const outcomes = (market.outcomes as string[]) ?? ['Si', 'No'];
-            const isBinary = outcomes.length === 2 && outcomes[0] === 'Si' && outcomes[1] === 'No';
-            if (isBinary) return null;
-            return (
-              <Section title="Opciones">
-                <div className="flex gap-1.5 flex-wrap">
-                  {outcomes.map((o: string) => (
-                    <span
-                      key={o}
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        market.outcome === o
-                          ? 'bg-green-100 text-green-700 ring-1 ring-green-400'
-                          : 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
-                      {o}
-                    </span>
-                  ))}
-                </div>
-              </Section>
-            );
-          })()}
-
           {market.outcome && (
             <Section title="Resultado">
               <span className="font-bold text-lg">{market.outcome}</span>
             </Section>
           )}
 
-          <Section title="Origen">
-            <p className="text-sm text-gray-500">
-              Tipo: {sourceContext.originType}
-              {sourceContext.originUrl && (
-                <>
-                  {' \u00B7 '}
-                  <a
-                    href={sourceContext.originUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
-                  >
-                    Fuente
-                  </a>
-                </>
-              )}
-            </p>
-          </Section>
         </div>
+      </div>
+
+      {/* Deployable JSON Preview */}
+      <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-bold">JSON</h2>
+          <CopyJsonButton json={JSON.stringify(deployable, null, 2)} />
+        </div>
+        <pre className="bg-gray-50 rounded-lg p-4 text-sm overflow-x-auto">
+          {JSON.stringify(deployable, null, 2)}
+        </pre>
       </div>
 
       {/* Iteration History */}
@@ -247,24 +253,35 @@ export default async function MarketDetailPage({ params }: Props) {
       )}
 
       {/* Activity Timeline */}
-      {events.length > 0 && (
+      {(events.length > 0 || activity.length > 0) && (
         <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
           <h2 className="text-lg font-bold mb-4">Actividad</h2>
-          <ul className="border-l-2 border-gray-200 ml-2 space-y-0">
-            {events.map((event) => (
-              <li key={event.id} className="relative pl-5 py-1.5">
-                <span className="absolute -left-[5px] top-2.5 w-2 h-2 rounded-full bg-gray-400" />
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xs text-gray-400 shrink-0 font-mono">
-                    {formatEventTime(event.createdAt)}
-                  </span>
-                  <span className="text-sm text-gray-700">
-                    {formatEvent(event.type as MarketEventType, event.iteration, event.detail as Record<string, unknown> | null)}
-                  </span>
+          {events.length > 0 && (
+            <ul className="border-l-2 border-gray-200 ml-2 space-y-0">
+              {events.map((event) => (
+                <li key={event.id} className="relative pl-5 py-1.5">
+                  <span className="absolute -left-[5px] top-2.5 w-2 h-2 rounded-full bg-gray-400" />
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xs text-gray-400 shrink-0 font-mono">
+                      {formatEventTime(event.createdAt)}
+                    </span>
+                    <span className="text-sm text-gray-700">
+                      {formatEvent(event.type as MarketEventType, event.iteration, event.detail as Record<string, unknown> | null)}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {activity.length > 0 && (
+            <div className={`divide-y divide-gray-50 ${events.length > 0 ? 'mt-4 pt-4 border-t border-gray-100' : ''}`}>
+              {activity.map((entry) => (
+                <div key={entry.id} className="px-0 py-2">
+                  <ActivityCard entry={{ ...entry, detail: entry.detail as Record<string, unknown> | null, createdAt: entry.createdAt.toISOString() }} />
                 </div>
-              </li>
-            ))}
-          </ul>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -381,22 +398,37 @@ export default async function MarketDetailPage({ params }: Props) {
         </div>
       )}
 
-      {/* Deployable JSON Preview */}
-      <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-bold">JSON</h2>
-          <CopyJsonButton json={JSON.stringify(deployable, null, 2)} />
+      {/* Related Signals */}
+      {relatedSignals.length > 0 && (
+        <div className="mt-6 bg-white rounded-lg border border-gray-200">
+          <div className="px-5 py-3 border-b border-gray-100">
+            <h2 className="text-lg font-bold">Señales relacionadas ({relatedSignals.length})</h2>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {relatedSignals.map((s) => {
+              const badge = { news: { label: 'Noticia', cls: 'bg-blue-100 text-blue-700' }, data: { label: 'Dato', cls: 'bg-amber-100 text-amber-700' }, social: { label: 'Social', cls: 'bg-purple-100 text-purple-700' }, event: { label: 'Evento', cls: 'bg-green-100 text-green-700' } }[s.type] ?? { label: s.type, cls: 'bg-gray-100 text-gray-600' };
+              return (
+                <div key={s.id} className="px-5 py-3">
+                  <div className="flex items-start gap-2">
+                    <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${badge.cls}`}>{badge.label}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">{s.source}</span>
+                        <span className="text-[10px] text-gray-300">{formatEventTime(s.publishedAt)}</span>
+                      </div>
+                      <p className="text-sm text-gray-800 mt-0.5">
+                        {s.url ? <a href={s.url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline">{s.text}</a> : s.text}
+                      </p>
+                      {s.summary && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{s.summary}</p>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-        <pre className="bg-gray-50 rounded-lg p-4 text-sm overflow-x-auto">
-          {JSON.stringify(deployable, null, 2)}
-        </pre>
-      </div>
-      </div>
+      )}
 
-      {/* Feedback sidebar */}
-      <div className="w-80 shrink-0 sticky top-6">
-        <HumanFeedback marketId={market.id} feedback={humanFeedback} />
-      </div>
       </div>
     </div>
   );
@@ -485,6 +517,17 @@ function formatEvent(
   return parts.join(' ');
 }
 
+const SECTION_COLORS: Record<string, string> = {
+  'Descripción': 'border-blue-400',
+  'Criterios de resolución': 'border-amber-400',
+  'Fuente de resolución': 'border-green-400',
+  'Contingencias': 'border-orange-400',
+  'Opciones': 'border-purple-400',
+  'Resultado': 'border-green-500',
+  'Cierre del mercado': 'border-gray-300',
+  'Fecha esperada de resolución': 'border-gray-300',
+};
+
 function Section({
   title,
   children,
@@ -492,9 +535,10 @@ function Section({
   title: string;
   children: React.ReactNode;
 }) {
+  const borderColor = SECTION_COLORS[title] ?? 'border-gray-300';
   return (
-    <div>
-      <h3 className="text-sm font-medium text-gray-500 mb-1">{title}</h3>
+    <div className={`border-l-3 ${borderColor} pl-3`}>
+      <h3 className="text-base font-semibold text-gray-700 mb-1">{title}</h3>
       <div>{children}</div>
     </div>
   );

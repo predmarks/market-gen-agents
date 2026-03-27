@@ -3,6 +3,7 @@ import { db } from '@/db/client';
 import { markets } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { logMarketEvent } from '@/lib/market-events';
+import { logActivity } from '@/lib/activity-log';
 
 export async function POST(
   _request: NextRequest,
@@ -29,6 +30,7 @@ export async function POST(
     .returning();
 
   await logMarketEvent(id, 'human_approved');
+  await logActivity('market_approved', { entityType: 'market', entityId: id, entityLabel: market.title, source: 'ui' });
 
   return NextResponse.json(updated);
 }

@@ -20,7 +20,7 @@ const OUTPUT_SCHEMA = {
     resolutionCriteria: { type: 'string' as const, description: 'Criterios de resolución mejorados' },
     resolutionSource: { type: 'string' as const, description: 'Fuente de resolución' },
     contingencies: { type: 'string' as const, description: 'Contingencias mejoradas' },
-    category: { type: 'string' as const, enum: ['Política', 'Economía', 'Deportes', 'Entretenimiento', 'Clima'] },
+    category: { type: 'string' as const, enum: ['Política', 'Economía', 'Deportes', 'Entretenimiento', 'Clima', 'Otros'] },
     tags: { type: 'array' as const, items: { type: 'string' as const } },
     endTimestamp: { type: 'number' as const, description: 'Unix timestamp del cierre (ajustar si timing es inseguro)' },
     expectedResolutionDate: { type: 'string' as const, description: 'Fecha esperada YYYY-MM-DD' },

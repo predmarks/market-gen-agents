@@ -1,11 +1,12 @@
 import { inngest } from './client';
 import { db } from '@/db/client';
 import { sourcingRuns, topics as topicsTable, topicSignals } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql, inArray } from 'drizzle-orm';
 import { ingestAllSources, markSignalsUsed } from '@/agents/sourcer/ingestion';
 import { updateTopics, markStaleTopics } from '@/agents/sourcer/topic-extractor';
 import type { SourcingStep } from '@/db/types';
 import type { Topic } from '@/agents/sourcer/types';
+import { logActivity } from '@/lib/activity-log';
 
 const STEP_NAMES = ['ingest', 'update-topics'] as const;
 
@@ -31,6 +32,7 @@ export const ingestionJob = inngest.createFunction(
           steps: buildSteps(0),
         })
         .returning({ id: sourcingRuns.id });
+      await logActivity('ingestion_started', { entityType: 'system', source: 'pipeline' });
       return run.id;
     });
 
@@ -71,7 +73,7 @@ export const ingestionJob = inngest.createFunction(
         const existingTopicRows = await db
           .select()
           .from(topicsTable)
-          .where(eq(topicsTable.status, 'active'));
+          .where(inArray(topicsTable.status, ['active', 'regular']));
 
         const existingTopics: Topic[] = existingTopicRows.map((row) => ({
           id: row.id,
@@ -111,13 +113,14 @@ export const ingestionJob = inngest.createFunction(
           }
 
           if (update.action === 'update' && update.existingTopicSlug) {
-            // Find the existing topic by slug
             const existing = existingTopicRows.find((t) => t.slug === update.existingTopicSlug);
             if (!existing) continue;
 
             await db
               .update(topicsTable)
               .set({
+                name: update.name,
+                slug: update.slug,
                 summary: update.summary,
                 score: update.score,
                 suggestedAngles: update.suggestedAngles,
@@ -127,7 +130,6 @@ export const ingestionJob = inngest.createFunction(
               })
               .where(eq(topicsTable.id, existing.id));
 
-            // Insert new topic_signals entries
             for (const idx of update.signalIndices) {
               const signalId = signalIdMap.get(idx);
               if (signalId) {
@@ -139,8 +141,68 @@ export const ingestionJob = inngest.createFunction(
             }
 
             updatedTopicIds.push(existing.id);
-          } else if (update.action === 'create') {
-            // Insert new topic
+          } else if (update.action === 'merge' && update.existingTopicSlug && update.mergeFromSlugs?.length) {
+            // Merge: absorb source topics into target
+            const target = existingTopicRows.find((t) => t.slug === update.existingTopicSlug);
+            if (!target) continue;
+
+            // Move signals from source topics to target
+            for (const sourceSlug of update.mergeFromSlugs) {
+              const source = existingTopicRows.find((t) => t.slug === sourceSlug);
+              if (!source) continue;
+
+              // Reassign signals
+              await db
+                .update(topicSignals)
+                .set({ topicId: target.id })
+                .where(eq(topicSignals.topicId, source.id));
+
+              // Dismiss source topic
+              await db
+                .update(topicsTable)
+                .set({ status: 'dismissed', updatedAt: now })
+                .where(eq(topicsTable.id, source.id));
+
+              console.log(`Merged topic "${source.name}" into "${target.name}"`);
+            }
+
+            // Count total signals after merge
+            const [{ count: totalSignals }] = await db
+              .select({ count: sql<number>`count(*)::int` })
+              .from(topicSignals)
+              .where(eq(topicSignals.topicId, target.id));
+
+            // Update target with new info
+            await db
+              .update(topicsTable)
+              .set({
+                name: update.name,
+                slug: update.slug,
+                summary: update.summary,
+                score: update.score,
+                suggestedAngles: update.suggestedAngles,
+                signalCount: totalSignals,
+                lastSignalAt: now,
+                updatedAt: now,
+              })
+              .where(eq(topicsTable.id, target.id));
+
+            // Link new signals
+            for (const idx of update.signalIndices) {
+              const signalId = signalIdMap.get(idx);
+              if (signalId) {
+                await db
+                  .insert(topicSignals)
+                  .values({ topicId: target.id, signalId })
+                  .onConflictDoNothing();
+              }
+            }
+
+            updatedTopicIds.push(target.id);
+          } else if (update.action === 'split' && update.splitFromSlug) {
+            // Split: create new topic from part of an existing one
+            const source = existingTopicRows.find((t) => t.slug === update.splitFromSlug);
+
             const [inserted] = await db
               .insert(topicsTable)
               .values({
@@ -158,7 +220,41 @@ export const ingestionJob = inngest.createFunction(
               .returning({ id: topicsTable.id });
 
             if (inserted) {
-              // Insert topic_signals entries
+              // Link signals to new topic
+              for (const idx of update.signalIndices) {
+                const signalId = signalIdMap.get(idx);
+                if (signalId) {
+                  await db
+                    .insert(topicSignals)
+                    .values({ topicId: inserted.id, signalId })
+                    .onConflictDoNothing();
+                }
+              }
+
+              if (source) {
+                console.log(`Split topic "${source.name}" → new topic "${update.name}"`);
+              }
+
+              updatedTopicIds.push(inserted.id);
+            }
+          } else if (update.action === 'create') {
+            const [inserted] = await db
+              .insert(topicsTable)
+              .values({
+                name: update.name,
+                slug: update.slug,
+                summary: update.summary,
+                category: update.category,
+                suggestedAngles: update.suggestedAngles,
+                score: update.score,
+                status: 'active',
+                signalCount: update.signalIndices.length,
+                lastSignalAt: now,
+              })
+              .onConflictDoNothing()
+              .returning({ id: topicsTable.id });
+
+            if (inserted) {
               for (const idx of update.signalIndices) {
                 const signalId = signalIdMap.get(idx);
                 if (signalId) {
@@ -192,6 +288,20 @@ export const ingestionJob = inngest.createFunction(
           .where(eq(sourcingRuns.id, runId));
       });
 
+      const signalsBySource: Record<string, number> = {};
+      for (const s of ingestionResult.signals) {
+        signalsBySource[s.source] = (signalsBySource[s.source] ?? 0) + 1;
+      }
+      await logActivity('ingestion_completed', {
+        entityType: 'system',
+        detail: {
+          signalsCount: ingestionResult.signals.length,
+          topicCount: freshTopicIds.length,
+          signalsBySource,
+          signals: ingestionResult.signals.map((s) => ({ source: s.source, text: s.text.slice(0, 150) })),
+        },
+        source: 'pipeline',
+      });
       return { status: 'complete', runId, topicIds: freshTopicIds };
     } catch (err) {
       // Mark run as failed
@@ -203,6 +313,7 @@ export const ingestionJob = inngest.createFunction(
           completedAt: new Date(),
         })
         .where(eq(sourcingRuns.id, runId));
+      await logActivity('ingestion_failed', { entityType: 'system', detail: { error: err instanceof Error ? err.message : String(err) }, source: 'pipeline' });
       throw err;
     }
   },

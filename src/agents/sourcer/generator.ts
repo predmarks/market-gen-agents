@@ -1,11 +1,11 @@
 import { callClaude } from '@/lib/llm';
 import { HARD_RULES, SOFT_RULES } from '@/config/rules';
 import { db } from '@/db/client';
-import { marketEvents, markets, globalFeedback } from '@/db/schema';
+import { marketEvents, markets, globalFeedback, config } from '@/db/schema';
 import { eq, desc, and, gte, isNotNull } from 'drizzle-orm';
 import type { DataPoint, GeneratedCandidate, Topic } from './types';
 
-const SYSTEM_PROMPT = `Sos un creador de mercados predictivos para Predmarks, una plataforma
+const DEFAULT_SYSTEM_PROMPT = `Sos un creador de mercados predictivos para Predmarks, una plataforma
 argentina de mercados de predicción. Recibís TEMAS ya analizados con ángulos
 sugeridos y tu trabajo es convertirlos en mercados formales y operables.
 
@@ -61,10 +61,47 @@ REGLAS DE VALIDACIÓN:
 {rules}
 
 FORMATO DE DESCRIPCIÓN:
-- La descripción DEBE estar en Markdown
-- Usar **negritas** para datos clave, [links](url) a fuentes, listas para puntos relevantes
-- Incluir contexto, datos actuales, y por qué el mercado es interesante
-- Estructura sugerida: contexto general → datos recientes → qué está en juego
+La descripción ES la especificación completa del mercado en Markdown.
+NO incluir contexto adicional, narrativa ni explicaciones de por qué el mercado
+es interesante. SOLO las secciones requeridas:
+  ## Criterio de resolución — dato exacto, fecha, fuente, cómo se determina el resultado
+  ## Contingencias — qué pasa si la fuente no publica, evento se cancela, etc.
+  ## Fuente de resolución — nombre + URL
+Los campos resolutionCriteria, resolutionSource y contingencies son resúmenes
+de una línea extraídos de la descripción.
+
+EJEMPLO 1 (Dólar Blue):
+Título: ¿En qué rango cerrará el dólar blue el Viernes 3 de Abril?
+Descripción:
+## Criterio de resolución
+
+Este mercado se resolverá según la **cotización de venta de cierre** del dólar blue el **viernes 3 de abril de 2026**, publicada por Ámbito Financiero. Los rangos son contiguos, mutuamente excluyentes y cubren todos los valores posibles.
+
+## Contingencias
+
+- Si el 3 de abril es feriado o no hay cotización, se utiliza la cotización de cierre del último día hábil anterior.
+- En caso de discrepancia entre fuentes, prevalece el valor publicado en la página de cotización del dólar informal de Ámbito Financiero.
+
+## Fuente de resolución
+
+Ámbito Financiero — [www.ambito.com/contenidos/dolar-informal.html](https://www.ambito.com/contenidos/dolar-informal.html)
+
+EJEMPLO 2 (Reservas BCRA):
+Título: ¿En qué rango estarán las Reservas del BCRA al Viernes 3 de Abril?
+Descripción:
+## Criterio de resolución
+
+Este mercado se resolverá según el **último dato publicado** de Reservas Internacionales del BCRA en la sección "Estadísticas e Indicadores" del sitio del BCRA al **viernes 3 de abril de 2026**. El dato puede corresponder a un día hábil anterior debido al rezago habitual de publicación del BCRA (2-5 días). Los rangos son contiguos, mutuamente excluyentes y cubren todos los valores posibles.
+
+## Contingencias
+
+- Si el 3 de abril es feriado o no hay nueva publicación, se utiliza el último dato disponible en el sitio del BCRA.
+- En caso de revisión posterior de los datos, se utilizará el dato publicado originalmente (primera publicación).
+- El dato de reservas es provisorio y está sujeto a cambios de valuación según lo indica el propio BCRA.
+
+## Fuente de resolución
+
+BCRA — [www.bcra.gob.ar/estadisticas-indicadores/](https://www.bcra.gob.ar/estadisticas-indicadores/)
 
 INSTRUCCIONES:
 - Cada tema viene con ángulos sugeridos. Usá esos ángulos como guía pero
@@ -82,14 +119,14 @@ const OUTPUT_SCHEMA = {
         type: 'object' as const,
         properties: {
           title: { type: 'string' as const, description: 'Pregunta clara en español argentino, con signos de interrogación' },
-          description: { type: 'string' as const, description: 'Contexto del mercado en formato Markdown. Usar secciones, listas, links y negritas para estructurar la información.' },
+          description: { type: 'string' as const, description: 'Especificación completa del mercado en Markdown con secciones ## Criterio de resolución, ## Contingencias, ## Fuente de resolución. Ver ejemplos en el prompt.' },
           outcomes: { type: 'array' as const, items: { type: 'string' as const }, description: 'Opciones del mercado. Binarios: ["Si", "No"]. Multi-opción: listar todas las opciones.' },
-          resolutionCriteria: { type: 'string' as const, description: 'Criterios de resolución claros e inequívocos' },
-          resolutionSource: { type: 'string' as const, description: 'Nombre y URL de la fuente de resolución' },
-          contingencies: { type: 'string' as const, description: 'Cláusulas de contingencia aplicables' },
+          resolutionCriteria: { type: 'string' as const, description: 'Resumen de una línea del criterio de resolución (extraído de la descripción)' },
+          resolutionSource: { type: 'string' as const, description: 'Nombre y URL de la fuente de resolución (extraído de la descripción)' },
+          contingencies: { type: 'string' as const, description: 'Resumen de una línea de las contingencias (extraído de la descripción)' },
           category: {
             type: 'string' as const,
-            enum: ['Política', 'Economía', 'Deportes', 'Entretenimiento', 'Clima'],
+            enum: ['Política', 'Economía', 'Deportes', 'Entretenimiento', 'Clima', 'Otros'],
           },
           tags: { type: 'array' as const, items: { type: 'string' as const } },
           endTimestamp: { type: 'number' as const, description: 'Unix timestamp en segundos para el cierre del mercado' },
@@ -111,6 +148,21 @@ const OUTPUT_SCHEMA = {
   },
   required: ['candidates'] as const,
 };
+
+export async function loadGenerationPrompt(): Promise<string> {
+  try {
+    const [row] = await db.select().from(config).where(eq(config.key, 'generation_prompt'));
+    if (row?.value) return row.value;
+  } catch { /* fallback */ }
+  return DEFAULT_SYSTEM_PROMPT;
+}
+
+export async function saveGenerationPrompt(prompt: string): Promise<void> {
+  await db
+    .insert(config)
+    .values({ key: 'generation_prompt', value: prompt })
+    .onConflictDoUpdate({ target: config.key, set: { value: prompt, updatedAt: new Date() } });
+}
 
 async function loadTriageFeedback(): Promise<string> {
   const thirtyDaysAgo = new Date();
@@ -190,18 +242,36 @@ export async function generateMarkets(
   dataPoints: DataPoint[],
   openMarketTitles: string[],
   targetCount: number = 10,
+  marketType?: 'binary' | 'multi-outcome',
+  instruction?: string,
 ): Promise<GeneratedCandidate[]> {
   if (topics.length === 0) return [];
 
-  const [triageFeedback, globalFeedbackText] = await Promise.all([
+  const [triageFeedback, globalFeedbackText, promptTemplate] = await Promise.all([
     loadTriageFeedback(),
     loadGlobalFeedback(),
+    loadGenerationPrompt(),
   ]);
   const today = new Date().toISOString().split('T')[0];
 
-  const system = SYSTEM_PROMPT
+  const editorInstructions: string[] = [];
+  if (marketType === 'multi-outcome') {
+    editorInstructions.push('Generá SOLO mercados multi-opción (3-8 outcomes). NO uses formato binario (Si/No).');
+  } else if (marketType === 'binary') {
+    editorInstructions.push('Generá SOLO mercados binarios con outcomes ["Si", "No"].');
+  }
+  if (instruction) {
+    editorInstructions.push(`${instruction}\nPriorizá esta instrucción sobre los ángulos sugeridos del tema.`);
+  }
+
+  const editorBlock = editorInstructions.length > 0
+    ? '\n\nINSTRUCCIÓN DEL EDITOR:\n' + editorInstructions.join('\n')
+    : '';
+
+  const system = promptTemplate
     .replace('{rules}', formatRules())
-    .replace('{targetCount}', String(targetCount));
+    .replace('{targetCount}', String(targetCount))
+    + editorBlock;
 
   const userMessage = `DATOS ACTUALES (no inventar otros):
 ${formatDataPoints(dataPoints)}

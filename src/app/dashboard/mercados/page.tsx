@@ -24,13 +24,15 @@ const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   cancelled: { label: 'Cancelado', className: 'bg-orange-100 text-orange-600' },
 };
 
+const ARCHIVED_STATUSES = ['resolved', 'rejected', 'cancelled'];
+
 const FILTERS = [
-  { key: 'all', label: 'Todos', statuses: null },
+  { key: 'all', label: 'Activos', statuses: null },
   { key: 'candidate', label: 'Candidatos', statuses: ['candidate'] },
   { key: 'processing', label: 'En revisión', statuses: ['processing'] },
   { key: 'proposal', label: 'Propuestas', statuses: ['proposal'] },
   { key: 'open', label: 'Abiertos', statuses: ['approved', 'open'] },
-  { key: 'archived', label: 'Archivados', statuses: ['resolved', 'rejected', 'cancelled'] },
+  { key: 'archived', label: 'Archivados', statuses: ARCHIVED_STATUSES },
 ];
 
 function ScoreBadge({ score }: { score: number }) {
@@ -75,7 +77,7 @@ export default function MercadosPage() {
   const filterCounts: Record<string, number> = {};
   for (const f of FILTERS) {
     if (!f.statuses) {
-      filterCounts[f.key] = markets.length;
+      filterCounts[f.key] = markets.filter((m) => !ARCHIVED_STATUSES.includes(m.status)).length;
     } else {
       filterCounts[f.key] = markets.filter((m) => f.statuses!.includes(m.status)).length;
     }
@@ -85,7 +87,7 @@ export default function MercadosPage() {
   const activeFilter = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
   const filtered = activeFilter.statuses
     ? markets.filter((m) => activeFilter.statuses!.includes(m.status))
-    : markets;
+    : markets.filter((m) => !ARCHIVED_STATUSES.includes(m.status));
 
   async function handleApprove(id: string) {
     setActionLoading(id);

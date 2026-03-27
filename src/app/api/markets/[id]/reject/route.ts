@@ -3,6 +3,7 @@ import { db } from '@/db/client';
 import { markets } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { logMarketEvent } from '@/lib/market-events';
+import { logActivity } from '@/lib/activity-log';
 
 export async function POST(
   request: NextRequest,
@@ -36,6 +37,8 @@ export async function POST(
       ...(body.source ? { source: body.source } : {}),
     },
   });
+
+  await logActivity('market_rejected', { entityType: 'market', entityId: id, entityLabel: market.title, detail: body.reason ? { reason: body.reason } : undefined, source: 'ui' });
 
   return NextResponse.json({ ...updated, rejectionReason: body.reason });
 }

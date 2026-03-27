@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db/client';
-import { topics, topicConversations } from '@/db/schema';
-import { desc, inArray, eq, sql } from 'drizzle-orm';
+import { topics } from '@/db/schema';
+import { desc, inArray, sql } from 'drizzle-orm';
 
 export async function GET() {
   const allTopics = await db
@@ -20,7 +20,7 @@ export async function GET() {
       feedback: topics.feedback,
       createdAt: topics.createdAt,
       updatedAt: topics.updatedAt,
-      conversationCount: sql<number>`(SELECT count(*)::int FROM topic_conversations WHERE topic_id = ${topics.id})`,
+      conversationCount: sql<number>`(SELECT count(*)::int FROM conversations WHERE conversations.context_type = 'topic' AND conversations.context_id = "topics"."id")`.mapWith(Number),
     })
     .from(topics)
     .where(inArray(topics.status, ['researching', 'active', 'stale']))

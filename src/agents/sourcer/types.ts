@@ -36,7 +36,7 @@ export interface Topic {
   suggestedAngles: string[];
   category: MarketCategory;
   score: number;
-  status?: 'active' | 'stale' | 'used' | 'dismissed';
+  status?: 'active' | 'stale' | 'used' | 'dismissed' | 'regular';
   signalCount?: number;
   lastSignalAt?: string;
   lastGeneratedAt?: string;

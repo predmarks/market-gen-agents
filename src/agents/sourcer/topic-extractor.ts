@@ -5,8 +5,10 @@ import { desc, gte, eq, and, isNotNull, lt } from 'drizzle-orm';
 import type { SourceSignal, Topic } from './types';
 
 export interface TopicUpdate {
-  action: 'update' | 'create';
+  action: 'update' | 'create' | 'merge' | 'split';
   existingTopicSlug?: string;
+  mergeFromSlugs?: string[];
+  splitFromSlug?: string;
   name: string;
   slug: string;
   summary: string;
@@ -23,9 +25,11 @@ Tu trabajo es tomar un conjunto de señales crudas (noticias, tendencias, datos 
 PROCESO:
 1. Revisar los TEMAS EXISTENTES activos
 2. Para cada señal nueva, decidir si COINCIDE con un tema existente o si es un TEMA NUEVO
-3. Para temas que coinciden: actualizar el resumen incorporando la nueva información, re-puntuar
+3. Para temas que coinciden: actualizar el nombre, resumen y ángulos incorporando la nueva información, re-puntuar
 4. Para temas nuevos: crear con nombre, resumen, ángulos y puntaje
 5. NO crear temas duplicados — si una señal habla del mismo tema que uno existente, usar UPDATE
+6. Si dos temas existentes son en realidad el MISMO tema: usar MERGE para combinarlos
+7. Si un tema creció demasiado y cubre ángulos no relacionados: usar SPLIT para separarlo
 
 RESUMEN — CÓMO ESCRIBIR UN BUEN RESUMEN:
 El resumen debe ser un DIGEST informativo de 3-5 oraciones que incluya:
@@ -49,8 +53,10 @@ REGLAS:
 - Cada ángulo debe tener una fecha de resolución implícita
 - Evitar temas puramente informativos sin ángulo predictivo
 - Preferir temas donde hay TENSIÓN (dos posturas posibles)
-- Para updates: el slug DEBE coincidir con el existingTopicSlug del tema existente
+- Para updates: existingTopicSlug DEBE coincidir con el slug del tema existente. Podés cambiar el nombre y slug del tema si evolucionó
 - Para creates: generar un slug nuevo (lowercase, sin acentos, guiones, max 100 chars)
+- Para merges: existingTopicSlug = tema destino, mergeFromSlugs = slugs de temas a absorber. El tema destino se queda con todo
+- Para splits: splitFromSlug = slug del tema a dividir. Creás el nuevo tema con las señales que se separan
 
 IMPORTANTE: Cada tema DEBE referenciar al menos una señal en signalIndices. NUNCA devolver signalIndices vacío.`;
 
@@ -64,12 +70,21 @@ const OUTPUT_SCHEMA = {
         properties: {
           action: {
             type: 'string' as const,
-            enum: ['update', 'create'],
-            description: '"update" para temas existentes, "create" para nuevos',
+            enum: ['update', 'create', 'merge', 'split'],
+            description: '"update" para actualizar temas existentes, "create" para nuevos, "merge" para combinar duplicados, "split" para dividir temas amplios',
           },
           existingTopicSlug: {
             type: 'string' as const,
-            description: 'Solo para action=update: slug del tema existente a actualizar',
+            description: 'Para update/merge: slug del tema existente destino',
+          },
+          mergeFromSlugs: {
+            type: 'array' as const,
+            items: { type: 'string' as const },
+            description: 'Solo para action=merge: slugs de temas a absorber en el tema destino',
+          },
+          splitFromSlug: {
+            type: 'string' as const,
+            description: 'Solo para action=split: slug del tema que se está dividiendo',
           },
           name: { type: 'string' as const, description: 'Nombre corto del tema' },
           slug: {
@@ -92,7 +107,7 @@ const OUTPUT_SCHEMA = {
           },
           category: {
             type: 'string' as const,
-            enum: ['Política', 'Economía', 'Deportes', 'Entretenimiento', 'Clima'],
+            enum: ['Política', 'Economía', 'Deportes', 'Entretenimiento', 'Clima', 'Otros'],
           },
           score: { type: 'number' as const, description: 'Score 0-10 de potencial de mercado' },
         },

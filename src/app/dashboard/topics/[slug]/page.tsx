@@ -3,10 +3,10 @@ export const dynamic = 'force-dynamic';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { db } from '@/db/client';
-import { topics, topicSignals, signals } from '@/db/schema';
+import { topics, topicSignals, signals, activityLog } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { TopicActions } from './_components/TopicActions';
-import { TopicChat } from './_components/TopicChat';
+import { ActivityCard } from '@/app/_components/ActivityCard';
 
 const TYPE_BADGE: Record<string, { label: string; className: string }> = {
   news: { label: 'Noticia', className: 'bg-blue-100 text-blue-700' },
@@ -60,17 +60,24 @@ export default async function TopicDetailPage({ params }: Props) {
     topic.score >= 4 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500';
 
   const statusLabel = topic.status === 'active' ? 'Activo' :
+    topic.status === 'regular' ? 'Recurrente' :
     topic.status === 'stale' ? 'Inactivo' : topic.status === 'used' ? 'Usado' : 'Descartado';
 
   const statusColor = topic.status === 'active' ? 'bg-green-100 text-green-600' :
+    topic.status === 'regular' ? 'bg-blue-100 text-blue-600' :
     topic.status === 'stale' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500';
 
   const feedbackEntries = (topic.feedback ?? []) as { text: string; createdAt: string }[];
 
+  const activity = await db
+    .select()
+    .from(activityLog)
+    .where(eq(activityLog.entityId, topic.id))
+    .orderBy(desc(activityLog.createdAt))
+    .limit(50);
+
   return (
-    <div className="flex gap-6">
-      {/* Left column — topic info */}
-      <div className="flex-1 min-w-0">
+    <div className="max-w-4xl">
         <Link href="/dashboard/topics" className="text-sm text-gray-500 hover:text-gray-900 mb-4 inline-block">
           &larr; Volver
         </Link>
@@ -173,12 +180,22 @@ export default async function TopicDetailPage({ params }: Props) {
             </div>
           )}
         </div>
-      </div>
 
-      {/* Right column — chat */}
-      <div className="w-96 shrink-0 sticky top-4 self-start">
-        <TopicChat topicId={topic.id} />
-      </div>
+        {/* Activity */}
+        {activity.length > 0 && (
+          <div className="bg-white rounded-lg border border-gray-200 mt-6">
+            <div className="px-5 py-3 border-b border-gray-100">
+              <h2 className="text-sm font-medium text-gray-500">Actividad</h2>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {activity.map((entry) => (
+                <div key={entry.id} className="px-4 py-2.5">
+                  <ActivityCard entry={{ ...entry, detail: entry.detail as Record<string, unknown> | null, createdAt: entry.createdAt.toISOString() }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
     </div>
   );
 }

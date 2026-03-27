@@ -156,3 +156,24 @@ export const SOFT_RULES: Rule[] = [
 
 // Hard rules that cannot be fixed by rewriting — immediate rejection
 export const UNFIXABLE_HARD_RULES = ['H4', 'H5', 'H8'] as const;
+
+// Load rules from DB, fallback to hardcoded
+export async function loadRules(): Promise<{ hard: Rule[]; soft: Rule[] }> {
+  try {
+    const { db } = await import('@/db/client');
+    const { rules: rulesTable } = await import('@/db/schema');
+    const { eq } = await import('drizzle-orm');
+
+    const rows = await db.select().from(rulesTable).where(eq(rulesTable.enabled, true));
+
+    if (rows.length > 0) {
+      return {
+        hard: rows.filter((r) => r.type === 'hard').map((r) => ({ id: r.id, type: 'hard' as const, description: r.description, check: r.check })),
+        soft: rows.filter((r) => r.type === 'soft').map((r) => ({ id: r.id, type: 'soft' as const, description: r.description, check: r.check })),
+      };
+    }
+  } catch {
+    // DB not available, use hardcoded
+  }
+  return { hard: HARD_RULES, soft: SOFT_RULES };
+}

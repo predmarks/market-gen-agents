@@ -63,6 +63,7 @@ export async function scoreMarket(
   market: MarketRecord,
   dataVerification: DataVerificationResult,
   rulesCheck: RulesCheckResult,
+  signalCount?: number,
 ): Promise<ScoringResult> {
   const marketSummary = {
     title: market.title,
@@ -86,6 +87,8 @@ ${JSON.stringify(dataVerification, null, 2)}
 Resultados de reglas:
 Reglas estrictas: ${rulesCheck.hardRuleResults.filter((r) => !r.passed).length} fallaron
 Advertencias blandas: ${rulesCheck.softRuleResults.filter((r) => !r.passed).map((r) => r.ruleId).join(', ') || 'ninguna'}
+
+Señales relacionadas: ${signalCount ?? 0} (cantidad de señales/noticias vinculadas al tema de este mercado)
 
 RÚBRICA DE PUNTUACIÓN:
 
@@ -121,6 +124,7 @@ RÚBRICA DE PUNTUACIÓN:
    5 = Nicho pero con audiencia interesada
    1 = Extremadamente nicho
    BONUS: Mercados donde la probabilidad va a oscilar puntúan más alto.
+   BONUS: Más señales relacionadas = más interés público. 10+ señales = fuerte señal de relevancia, 20+ = tema caliente.
 
 Fecha de hoy: ${new Date().toISOString().split('T')[0]}
 

@@ -1,0 +1,887 @@
+import { NextRequest, NextResponse } from 'next/server';
+import Anthropic from '@anthropic-ai/sdk';
+import { db } from '@/db/client';
+import { topics, markets, signals, conversations, topicSignals, globalFeedback, rules as rulesTable, activityLog, config } from '@/db/schema';
+import { eq, desc, sql, and, gt, inArray } from 'drizzle-orm';
+import { rescoreTopic } from '@/agents/sourcer/scorer';
+import { loadRules } from '@/config/rules';
+import { slugify } from '@/agents/sourcer/types';
+import { inngest } from '@/inngest/client';
+import { logActivity } from '@/lib/activity-log';
+import { loadGenerationPrompt, saveGenerationPrompt } from '@/agents/sourcer/generator';
+
+const client = new Anthropic({ maxRetries: 2 });
+
+async function loadChatPrompt(): Promise<string> {
+  try {
+    const [row] = await db.select().from(config).where(eq(config.key, 'chat_prompt'));
+    if (row?.value) return row.value;
+  } catch { /* fallback */ }
+  return DEFAULT_CHAT_PROMPT;
+}
+
+async function saveChatPrompt(prompt: string): Promise<void> {
+  await db
+    .insert(config)
+    .values({ key: 'chat_prompt', value: prompt })
+    .onConflictDoUpdate({ target: config.key, set: { value: prompt, updatedAt: new Date() } });
+}
+
+export const maxDuration = 300; // 5 min timeout for multi-turn tool loops
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+type ContextType = 'topic' | 'market' | 'signal' | 'global';
+
+// --- System prompt builders ---
+
+const DEFAULT_CHAT_PROMPT = `Sos el copiloto de Predmarks, una plataforma argentina de mercados de predicción.
+
+PERSONALIDAD:
+- Hablás en español argentino, breve y directo. Nada de listas de capacidades ni explicaciones de qué podés hacer.
+- Cuando el usuario pide algo, HACELO directamente usando las herramientas. No pidas confirmación salvo que sea destructivo.
+- Si te preguntan qué podés hacer, respondé algo como "Puedo consultar, editar y analizar todo lo que ves en la plataforma. Preguntame lo que necesites."
+- NUNCA listes tus herramientas ni hagas bullet points de capacidades. Sos un colega, no un manual.
+
+COMPORTAMIENTO:
+- Usá las herramientas proactivamente. Si el usuario menciona un tema o mercado, buscalo directamente.
+- Para feedback: guardalo con save_feedback. Si tiene valor general, extraé aprendizajes globales.
+- Respuestas cortas. Si la acción se completó, confirmá en una oración.
+- Tenés acceso a todos los temas, mercados, señales, reglas. Podés consultar, modificar, fusionar, investigar, generar mercados y lanzar pipelines.
+- Cuando el usuario pida un mercado específico (ej: "creame un mercado sobre X"), usá el parámetro \`instruction\` de generate_markets para pasar el pedido concreto al generador.
+- Cuando el usuario quiera modificar cómo se generan los mercados (formato, criterios de resolución, descripciones, etc.), guardalo como global_learnings con save_feedback.`;
+
+async function buildTopicContext(topicId: string): Promise<string> {
+  const [topic] = await db.select().from(topics).where(eq(topics.id, topicId));
+  if (!topic) return 'Tema no encontrado.';
+
+  const linkedSignals = await db
+    .select({ text: signals.text, source: signals.source, publishedAt: signals.publishedAt })
+    .from(topicSignals)
+    .innerJoin(signals, eq(topicSignals.signalId, signals.id))
+    .where(eq(topicSignals.topicId, topicId))
+    .orderBy(desc(signals.publishedAt))
+    .limit(20);
+
+  const feedbackEntries = (topic.feedback ?? []) as { text: string; createdAt: string }[];
+
+  return `CONTEXTO: TEMA
+- Nombre: ${topic.name}
+- Categoría: ${topic.category}
+- Score: ${topic.score}/10
+- Estado: ${topic.status}
+- Resumen: ${topic.summary}
+
+ÁNGULOS SUGERIDOS:
+${topic.suggestedAngles.length > 0 ? topic.suggestedAngles.map((a) => `- ${a}`).join('\n') : 'Sin ángulos.'}
+
+SEÑALES VINCULADAS (${linkedSignals.length}):
+${linkedSignals.length > 0 ? linkedSignals.map((s, i) => `${i + 1}. [${s.source}] ${s.text} (${s.publishedAt.toISOString().split('T')[0]})`).join('\n') : 'Sin señales.'}
+
+FEEDBACK PREVIO:
+${feedbackEntries.length > 0 ? feedbackEntries.map((f) => `- ${f.text}`).join('\n') : 'Sin feedback.'}`;
+}
+
+async function buildMarketContext(marketId: string): Promise<string> {
+  const [market] = await db.select().from(markets).where(eq(markets.id, marketId));
+  if (!market) return 'Mercado no encontrado.';
+
+  const sourceContext = market.sourceContext as { topicIds?: string[] } | null;
+  const sourceTopicIds = sourceContext?.topicIds ?? [];
+
+  // Fetch related signals through source topics
+  let signalsContext = '';
+  if (sourceTopicIds.length > 0) {
+    const relatedSignals = await db
+      .select({ text: signals.text, source: signals.source, publishedAt: signals.publishedAt })
+      .from(topicSignals)
+      .innerJoin(signals, eq(topicSignals.signalId, signals.id))
+      .where(inArray(topicSignals.topicId, sourceTopicIds))
+      .orderBy(desc(signals.publishedAt))
+      .limit(20);
+
+    if (relatedSignals.length > 0) {
+      signalsContext = `\n\nSEÑALES RELACIONADAS (${relatedSignals.length}):\n${relatedSignals.map((s, i) => `${i + 1}. [${s.source}] ${s.text} (${s.publishedAt.toISOString().split('T')[0]})`).join('\n')}`;
+    }
+  }
+
+  return `CONTEXTO: MERCADO
+- Título: ${market.title}
+- Categoría: ${market.category}
+- Estado: ${market.status}
+- Outcomes: ${(market.outcomes as string[]).join(', ')}
+- Descripción: ${market.description}
+- Criterios de resolución: ${market.resolutionCriteria}
+- Fuente de resolución: ${market.resolutionSource}
+- Contingencias: ${market.contingencies}${signalsContext}`;
+}
+
+async function buildSignalContext(signalId: string): Promise<string> {
+  const [signal] = await db.select().from(signals).where(eq(signals.id, signalId));
+  if (!signal) return 'Señal no encontrada.';
+
+  return `CONTEXTO: SEÑAL
+- Tipo: ${signal.type}
+- Texto: ${signal.text}
+- Fuente: ${signal.source}
+- Categoría: ${signal.category ?? 'Sin categoría'}
+- Score: ${signal.score ?? 'Sin score'}
+- Publicada: ${signal.publishedAt.toISOString().split('T')[0]}
+${signal.summary ? `- Resumen: ${signal.summary}` : ''}`;
+}
+
+// --- Global data summaries ---
+
+async function loadTopicsSummary(): Promise<string> {
+  const allTopics = await db
+    .select({ id: topics.id, name: topics.name, category: topics.category, score: topics.score, signalCount: topics.signalCount, status: topics.status })
+    .from(topics)
+    .where(sql`${topics.status} IN ('active', 'stale', 'researching', 'regular')`)
+    .orderBy(desc(topics.score))
+    .limit(100);
+
+  if (allTopics.length === 0) return '';
+  const lines = allTopics.map((t) => `- [${t.id}] ${t.name} | ${t.category} | score:${t.score} | ${t.signalCount} señales | ${t.status}`);
+  return `\nTODOS LOS TEMAS (${allTopics.length}):\n${lines.join('\n')}`;
+}
+
+async function loadMarketsSummary(): Promise<string> {
+  const allMarkets = await db
+    .select({ id: markets.id, title: markets.title, category: markets.category, status: markets.status, outcomes: markets.outcomes })
+    .from(markets)
+    .where(eq(markets.isArchived, false))
+    .orderBy(desc(markets.createdAt))
+    .limit(100);
+
+  if (allMarkets.length === 0) return '';
+  const lines = allMarkets.map((m) => `- [${m.id}] ${m.title} | ${m.category} | ${m.status} | outcomes: ${(m.outcomes as string[]).join(', ')}`);
+  return `\nTODOS LOS MERCADOS (${allMarkets.length}):\n${lines.join('\n')}`;
+}
+
+// --- Claude tools ---
+
+const TOOLS: Anthropic.Tool[] = [
+  {
+    name: 'lookup_topic',
+    description: 'Get full details of a specific topic (summary, signals, feedback, angles)',
+    input_schema: {
+      type: 'object' as const,
+      properties: { topicId: { type: 'string' as const } },
+      required: ['topicId'],
+    },
+  },
+  {
+    name: 'lookup_market',
+    description: 'Get full details of a specific market (description, criteria, contingencies, review)',
+    input_schema: {
+      type: 'object' as const,
+      properties: { marketId: { type: 'string' as const } },
+      required: ['marketId'],
+    },
+  },
+  {
+    name: 'lookup_signals',
+    description: 'Search signals by text query or category. Returns up to 20 matching signals.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string' as const, description: 'Text search (matches signal text)' },
+        category: { type: 'string' as const, description: 'Filter by category' },
+        limit: { type: 'number' as const, description: 'Max results (default 20)' },
+      },
+    },
+  },
+  {
+    name: 'save_feedback',
+    description: 'Save feedback about an entity, or save global generation guidelines. Use global_learnings for instructions that should apply to ALL future market generation (format, resolution criteria, descriptions, etc.).',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        feedback: { type: 'string' as const, description: 'Clear, actionable feedback' },
+        global_learnings: {
+          type: 'array' as const,
+          items: { type: 'string' as const },
+          description: 'Generalizable learnings for ALL future entities. Empty if entity-specific only.',
+        },
+      },
+      required: ['feedback', 'global_learnings'],
+    },
+  },
+  {
+    name: 'update_topic',
+    description: 'Modify a topic\'s properties',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        topicId: { type: 'string' as const },
+        name: { type: 'string' as const },
+        summary: { type: 'string' as const },
+        category: { type: 'string' as const },
+        suggestedAngles: { type: 'array' as const, items: { type: 'string' as const } },
+        score: { type: 'number' as const },
+        status: { type: 'string' as const, enum: ['active', 'stale', 'dismissed', 'regular'] },
+      },
+      required: ['topicId'],
+    },
+  },
+  {
+    name: 'update_market',
+    description: 'Modify a market\'s properties',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        marketId: { type: 'string' as const },
+        title: { type: 'string' as const },
+        description: { type: 'string' as const },
+        resolutionCriteria: { type: 'string' as const },
+        resolutionSource: { type: 'string' as const },
+        contingencies: { type: 'string' as const },
+        category: { type: 'string' as const },
+        tags: { type: 'array' as const, items: { type: 'string' as const } },
+        outcomes: { type: 'array' as const, items: { type: 'string' as const } },
+        status: { type: 'string' as const },
+      },
+      required: ['marketId'],
+    },
+  },
+  {
+    name: 'update_signal',
+    description: 'Modify a signal\'s properties',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        signalId: { type: 'string' as const },
+        category: { type: 'string' as const },
+        score: { type: 'number' as const },
+      },
+      required: ['signalId'],
+    },
+  },
+  {
+    name: 'merge_topics',
+    description: 'Merge duplicate topics into one. Moves all signals from source topics to target, dismisses sources.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        targetTopicId: { type: 'string' as const, description: 'ID of the topic to keep' },
+        sourceTopicIds: { type: 'array' as const, items: { type: 'string' as const }, description: 'IDs of topics to merge into target' },
+      },
+      required: ['targetTopicId', 'sourceTopicIds'],
+    },
+  },
+  {
+    name: 'link_signal_to_topic',
+    description: 'Associate existing signals to a topic',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        topicId: { type: 'string' as const },
+        signalIds: { type: 'array' as const, items: { type: 'string' as const }, description: 'Signal IDs to link' },
+      },
+      required: ['topicId', 'signalIds'],
+    },
+  },
+  {
+    name: 'research_topic',
+    description: 'Trigger web research for a topic — searches for new signals and links them. Runs in background.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        topicId: { type: 'string' as const },
+        description: { type: 'string' as const, description: 'What to research (guides the web search)' },
+      },
+      required: ['topicId', 'description'],
+    },
+  },
+  {
+    name: 'update_rule',
+    description: 'Modify an existing rule\'s description, check, or enabled status',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        ruleId: { type: 'string' as const, description: 'Rule ID (e.g. H1, S3)' },
+        description: { type: 'string' as const },
+        check: { type: 'string' as const },
+        enabled: { type: 'boolean' as const },
+      },
+      required: ['ruleId'],
+    },
+  },
+  {
+    name: 'create_rule',
+    description: 'Create a new rule',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string' as const, description: 'Rule ID (e.g. H13, S9)' },
+        type: { type: 'string' as const, enum: ['hard', 'soft'] },
+        description: { type: 'string' as const },
+        check: { type: 'string' as const },
+      },
+      required: ['id', 'type', 'description', 'check'],
+    },
+  },
+  {
+    name: 'ingest_signals',
+    description: 'Trigger signal ingestion from all sources (RSS, Twitter, economic data). Runs in background.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'generate_markets',
+    description: 'Generate market candidates from topics. Runs in background.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        topicIds: { type: 'array' as const, items: { type: 'string' as const }, description: 'Topic IDs to generate markets from' },
+        count: { type: 'number' as const, description: 'Number of markets to generate (default 5)' },
+        marketType: { type: 'string' as const, enum: ['binary', 'multi-outcome'], description: 'Force binary (Si/No) or multi-outcome (3-8 options) format. Omit to let the generator decide.' },
+        instruction: { type: 'string' as const, description: 'Specific angle or instruction for market generation (e.g. "mercado sobre la fecha de regreso"). Passed directly to the generator.' },
+      },
+      required: ['topicIds'],
+    },
+  },
+  {
+    name: 'review_market',
+    description: 'Trigger the review pipeline for a market candidate. Runs in background.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        marketId: { type: 'string' as const },
+      },
+      required: ['marketId'],
+    },
+  },
+  {
+    name: 'rescore_topic',
+    description: 'Re-evaluate a topic\'s score based on its current state and feedback',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        topicId: { type: 'string' as const },
+      },
+      required: ['topicId'],
+    },
+  },
+  {
+    name: 'get_generation_prompt',
+    description: 'Read the current market generation system prompt template. Returns the full prompt text with {rules} and {targetCount} placeholders.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'update_generation_prompt',
+    description: 'Update the market generation system prompt template. Keep {rules} and {targetCount} placeholders intact.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        prompt: { type: 'string' as const, description: 'The full updated prompt template' },
+        summary: { type: 'string' as const, description: 'Short description of what was changed (e.g. "added example for political markets")' },
+      },
+      required: ['prompt', 'summary'],
+    },
+  },
+  {
+    name: 'get_chat_prompt',
+    description: 'Read the current MiniChat system prompt.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'update_chat_prompt',
+    description: 'Update the MiniChat system prompt. Changes take effect on the next message.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        prompt: { type: 'string' as const, description: 'The full updated chat prompt' },
+        summary: { type: 'string' as const, description: 'Short description of what was changed' },
+      },
+      required: ['prompt', 'summary'],
+    },
+  },
+];
+
+// --- Tool execution ---
+// Returns tool_result content string for multi-turn
+
+async function executeTool(block: Anthropic.ToolUseBlock, contextType: ContextType, contextId: string | null): Promise<string> {
+  // Lookup tools — return data for Claude to use
+  if (block.name === 'lookup_topic') {
+    const { topicId } = block.input as { topicId: string };
+    return await buildTopicContext(topicId);
+  }
+
+  if (block.name === 'lookup_market') {
+    const { marketId } = block.input as { marketId: string };
+    return await buildMarketContext(marketId);
+  }
+
+  if (block.name === 'lookup_signals') {
+    const { query, category, limit: lim } = block.input as { query?: string; category?: string; limit?: number };
+    const maxResults = Math.min(lim ?? 20, 50);
+
+    let rows;
+    if (query) {
+      rows = await db.select().from(signals)
+        .where(sql`${signals.text} ILIKE ${'%' + query + '%'}`)
+        .orderBy(desc(signals.publishedAt))
+        .limit(maxResults);
+    } else if (category) {
+      rows = await db.select().from(signals)
+        .where(eq(signals.category, category))
+        .orderBy(desc(signals.publishedAt))
+        .limit(maxResults);
+    } else {
+      rows = await db.select().from(signals)
+        .orderBy(desc(signals.publishedAt))
+        .limit(maxResults);
+    }
+
+    if (rows.length === 0) return 'No se encontraron señales.';
+    return rows.map((s) =>
+      `- [${s.id}] [${s.type}] [${s.source}] ${s.text} | cat:${s.category ?? '?'} | score:${s.score ?? '?'} | ${s.publishedAt.toISOString().split('T')[0]}`
+    ).join('\n');
+  }
+
+  // Write tools — execute side effects
+  if (block.name === 'save_feedback') {
+    const { feedback, global_learnings } = block.input as { feedback: string; global_learnings: string[] };
+
+    if (contextType === 'topic' && contextId) {
+      const entry = JSON.stringify([{ text: feedback, createdAt: new Date().toISOString() }]);
+      await db
+        .update(topics)
+        .set({
+          feedback: sql`COALESCE(${topics.feedback}, '[]'::jsonb) || ${entry}::jsonb`,
+          updatedAt: new Date(),
+        })
+        .where(eq(topics.id, contextId));
+
+      const [topic] = await db.select().from(topics).where(eq(topics.id, contextId));
+      if (topic) {
+        const allFeedback = (topic.feedback ?? []) as { text: string; createdAt: string }[];
+        const { score } = await rescoreTopic(
+          { name: topic.name, summary: topic.summary, category: topic.category },
+          allFeedback,
+        );
+        await db.update(topics).set({ score, status: score < 2 ? 'stale' : topic.status, updatedAt: new Date() }).where(eq(topics.id, contextId));
+      }
+    }
+
+    if (global_learnings.length > 0) {
+      await db.insert(globalFeedback).values(global_learnings.map((text) => ({ text })));
+    }
+    // Get entity name for activity log
+    let contextLabel: string | undefined;
+    let contextUrl: string | undefined;
+    if (contextType === 'topic' && contextId) {
+      const [t] = await db.select({ name: topics.name, slug: topics.slug }).from(topics).where(eq(topics.id, contextId));
+      if (t) { contextLabel = t.name; contextUrl = `/dashboard/topics/${t.slug}`; }
+    } else if (contextType === 'market' && contextId) {
+      const [m] = await db.select({ title: markets.title }).from(markets).where(eq(markets.id, contextId));
+      if (m) { contextLabel = m.title; contextUrl = `/dashboard/markets/${contextId}`; }
+    }
+    await logActivity('feedback_saved', { entityType: contextType, entityId: contextId ?? undefined, entityLabel: contextLabel, detail: { feedback, entityType: contextType, contextLabel, contextUrl, globalLearnings: global_learnings.length }, source: 'chat' });
+    return 'Feedback guardado.';
+  }
+
+  if (block.name === 'update_topic') {
+    const { topicId, ...fields } = block.input as Record<string, unknown>;
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (fields.name) { updates.name = fields.name; updates.slug = slugify(fields.name as string); }
+    if (fields.summary) updates.summary = fields.summary;
+    if (fields.category) updates.category = fields.category;
+    if (fields.suggestedAngles) updates.suggestedAngles = fields.suggestedAngles;
+    if (fields.score !== undefined) updates.score = fields.score;
+    if (fields.status) updates.status = fields.status;
+    await db.update(topics).set(updates).where(eq(topics.id, topicId as string));
+    const [updatedT] = await db.select({ slug: topics.slug, name: topics.name }).from(topics).where(eq(topics.id, topicId as string));
+    await logActivity('topic_updated', { entityType: 'topic', entityId: topicId as string, entityLabel: updatedT?.name ?? (fields.name as string), detail: { ...fields as Record<string, unknown>, topicSlug: updatedT?.slug }, source: 'chat' });
+    return 'Tema actualizado.';
+  }
+
+  if (block.name === 'update_market') {
+    const { marketId, ...fields } = block.input as Record<string, unknown>;
+    const updates: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(fields)) {
+      if (v !== undefined) updates[k] = v;
+    }
+    if (Object.keys(updates).length > 0) {
+      await db.update(markets).set(updates).where(eq(markets.id, marketId as string));
+    }
+    return 'Mercado actualizado.';
+  }
+
+  if (block.name === 'update_signal') {
+    const { signalId, ...fields } = block.input as Record<string, unknown>;
+    const updates: Record<string, unknown> = {};
+    if (fields.category) updates.category = fields.category;
+    if (fields.score !== undefined) updates.score = fields.score;
+    if (Object.keys(updates).length > 0) {
+      await db.update(signals).set(updates).where(eq(signals.id, signalId as string));
+    }
+    return 'Señal actualizada.';
+  }
+
+  if (block.name === 'merge_topics') {
+    const { targetTopicId, sourceTopicIds } = block.input as { targetTopicId: string; sourceTopicIds: string[] };
+    const now = new Date();
+
+    for (const sourceId of sourceTopicIds) {
+      // Delete signals that already exist on target to avoid PK conflicts
+      await db.execute(sql`
+        DELETE FROM topic_signals
+        WHERE topic_id = ${sourceId}
+        AND signal_id IN (SELECT signal_id FROM topic_signals WHERE topic_id = ${targetTopicId})
+      `);
+      // Move remaining signals from source to target
+      await db.update(topicSignals).set({ topicId: targetTopicId }).where(eq(topicSignals.topicId, sourceId));
+      // Dismiss source topic
+      await db.update(topics).set({ status: 'dismissed', updatedAt: now }).where(eq(topics.id, sourceId));
+    }
+
+    // Recount target signals
+    const [{ count: totalSignals }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(topicSignals)
+      .where(eq(topicSignals.topicId, targetTopicId));
+
+    await db.update(topics).set({ signalCount: totalSignals, updatedAt: now }).where(eq(topics.id, targetTopicId));
+    const [mergedT] = await db.select({ slug: topics.slug, name: topics.name }).from(topics).where(eq(topics.id, targetTopicId));
+    await logActivity('topics_merged', { entityType: 'topic', entityId: targetTopicId, entityLabel: mergedT?.name, detail: { sourceTopicIds, totalSignals, topicSlug: mergedT?.slug }, source: 'chat' });
+    return `Merge completado. ${sourceTopicIds.length} tema(s) fusionados. Total señales: ${totalSignals}.`;
+  }
+
+  if (block.name === 'link_signal_to_topic') {
+    const { topicId, signalIds } = block.input as { topicId: string; signalIds: string[] };
+    let linked = 0;
+    for (const signalId of signalIds) {
+      try {
+        await db.insert(topicSignals).values({ topicId, signalId }).onConflictDoNothing();
+        linked++;
+      } catch { /* skip */ }
+    }
+
+    // Update signal count and lastSignalAt
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(topicSignals)
+      .where(eq(topicSignals.topicId, topicId));
+
+    await db.update(topics).set({ signalCount: count, lastSignalAt: new Date(), updatedAt: new Date() }).where(eq(topics.id, topicId));
+    const [linkedT] = await db.select({ slug: topics.slug, name: topics.name }).from(topics).where(eq(topics.id, topicId));
+    await logActivity('signals_linked', { entityType: 'topic', entityId: topicId, entityLabel: linkedT?.name, detail: { linked, total: count, topicSlug: linkedT?.slug }, source: 'chat' });
+    return `${linked} señal(es) vinculada(s) al tema. Total: ${count}.`;
+  }
+
+  if (block.name === 'research_topic') {
+    const { topicId, description } = block.input as { topicId: string; description: string };
+
+    // Set topic to researching status
+    await db.update(topics).set({ status: 'researching', updatedAt: new Date() }).where(eq(topics.id, topicId));
+
+    // Trigger the existing suggest-topic Inngest job
+    await inngest.send({
+      name: 'topics/suggest.requested',
+      data: { description, topicId },
+    });
+
+    const [researchT] = await db.select({ slug: topics.slug }).from(topics).where(eq(topics.id, topicId));
+    await logActivity('topic_research_started', { entityType: 'topic', entityId: topicId, entityLabel: description, detail: { topicSlug: researchT?.slug }, source: 'chat' });
+    return `Investigación iniciada para "${description}". El tema se actualizará cuando termine.`;
+  }
+
+  if (block.name === 'update_rule') {
+    const { ruleId, ...fields } = block.input as { ruleId: string; description?: string; check?: string; enabled?: boolean };
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (fields.description !== undefined) updates.description = fields.description;
+    if (fields.check !== undefined) updates.check = fields.check;
+    if (fields.enabled !== undefined) updates.enabled = fields.enabled;
+    await db.update(rulesTable).set(updates).where(eq(rulesTable.id, ruleId));
+    await logActivity('rule_updated', { entityType: 'rule', entityLabel: ruleId, detail: fields as Record<string, unknown>, source: 'chat' });
+    return `Regla ${ruleId} actualizada.`;
+  }
+
+  if (block.name === 'create_rule') {
+    const { id, type, description, check } = block.input as { id: string; type: string; description: string; check: string };
+    await db.insert(rulesTable).values({ id, type, description, check }).onConflictDoNothing();
+    await logActivity('rule_created', { entityType: 'rule', entityLabel: id, detail: { type, description }, source: 'chat' });
+    return `Regla ${id} creada.`;
+  }
+
+  if (block.name === 'ingest_signals') {
+    await inngest.send({ name: 'signals/ingest.requested', data: {} });
+    await logActivity('ingestion_started', { entityType: 'system', source: 'chat' });
+    return 'Ingesta de señales iniciada. Se actualizarán señales y temas cuando termine.';
+  }
+
+  if (block.name === 'generate_markets') {
+    const { topicIds, count, marketType, instruction } = block.input as { topicIds: string[]; count?: number; marketType?: 'binary' | 'multi-outcome'; instruction?: string };
+    await inngest.send({
+      name: 'markets/generate.requested',
+      data: { topicIds, count: count ?? 5, marketType, instruction },
+    });
+    const topicRows = await db.select({ name: topics.name }).from(topics).where(inArray(topics.id, topicIds));
+    const topicNames = topicRows.map((t) => t.name);
+    // Log per-topic so each topic's detail page shows the event
+    for (const topicId of topicIds) {
+      const name = topicRows.find((t) => t.name)?.name;
+      await logActivity('generation_started', {
+        entityType: 'topic',
+        entityId: topicId,
+        entityLabel: topicNames.join(', '),
+        detail: { topicNames, marketType, instruction },
+        source: 'chat',
+      });
+    }
+    return `Generación de ${count ?? 5} mercados ${marketType === 'multi-outcome' ? 'multi-opción' : marketType === 'binary' ? 'binarios' : ''} iniciada desde ${topicIds.length} tema(s).${instruction ? ` Instrucción: "${instruction}"` : ''}`;
+  }
+
+  if (block.name === 'review_market') {
+    const { marketId } = block.input as { marketId: string };
+    await inngest.send({
+      name: 'market/review.requested',
+      data: { marketId },
+    });
+    await logActivity('review_started', { entityType: 'market', entityId: marketId, source: 'chat' });
+    return `Revisión del mercado ${marketId} iniciada.`;
+  }
+
+  if (block.name === 'rescore_topic') {
+    const { topicId } = block.input as { topicId: string };
+    const [topic] = await db.select().from(topics).where(eq(topics.id, topicId));
+    if (!topic) return 'Tema no encontrado.';
+
+    const feedback = (topic.feedback ?? []) as { text: string; createdAt: string }[];
+    const { score, reason } = await rescoreTopic(
+      { name: topic.name, summary: topic.summary, category: topic.category },
+      feedback,
+    );
+    await db.update(topics).set({
+      score,
+      status: score < 2 ? 'stale' : topic.status,
+      updatedAt: new Date(),
+    }).where(eq(topics.id, topicId));
+
+    await logActivity('topic_rescored', { entityType: 'topic', entityId: topicId, entityLabel: topic.name, detail: { score, reason, topicSlug: topic.slug }, source: 'chat' });
+    return `Tema re-puntuado: ${score.toFixed(1)}/10. ${reason}`;
+  }
+
+  if (block.name === 'get_generation_prompt') {
+    const prompt = await loadGenerationPrompt();
+    return prompt;
+  }
+
+  if (block.name === 'update_generation_prompt') {
+    const { prompt, summary } = block.input as { prompt: string; summary: string };
+    await saveGenerationPrompt(prompt);
+    await logActivity('generation_prompt_updated', { entityType: 'system', entityLabel: summary, detail: { summary }, source: 'chat' });
+    return 'Prompt de generación actualizado.';
+  }
+
+  if (block.name === 'get_chat_prompt') {
+    const prompt = await loadChatPrompt();
+    return prompt;
+  }
+
+  if (block.name === 'update_chat_prompt') {
+    const { prompt, summary } = block.input as { prompt: string; summary: string };
+    await saveChatPrompt(prompt);
+    await logActivity('chat_prompt_updated', { entityType: 'system', entityLabel: summary, detail: { summary }, source: 'chat' });
+    return 'Prompt del chat actualizado. Los cambios se aplican en el próximo mensaje.';
+  }
+
+  return 'Tool no reconocido.';
+}
+
+// --- GET: list conversations ---
+
+export async function GET(request: NextRequest) {
+  const contextType = request.nextUrl.searchParams.get('contextType') as ContextType | null;
+  const contextId = request.nextUrl.searchParams.get('contextId');
+
+  let query = db.select().from(conversations).orderBy(desc(conversations.updatedAt)).limit(50);
+
+  let rows;
+  if (contextType && contextId) {
+    rows = await db.select().from(conversations)
+      .where(eq(conversations.contextType, contextType))
+      .orderBy(desc(conversations.updatedAt))
+      .limit(50);
+    // Filter by contextId in JS since we can't easily chain .where with and
+    rows = rows.filter((r) => r.contextId === contextId);
+  } else if (contextType) {
+    rows = await db.select().from(conversations)
+      .where(eq(conversations.contextType, contextType))
+      .orderBy(desc(conversations.updatedAt))
+      .limit(50);
+  } else {
+    rows = await query;
+  }
+
+  return NextResponse.json({
+    conversations: rows.map((c) => ({
+      id: c.id,
+      contextType: c.contextType,
+      contextId: c.contextId,
+      title: c.title,
+      messages: c.messages,
+      updatedAt: c.updatedAt.toISOString(),
+    })),
+  });
+}
+
+// --- POST: send message ---
+
+export async function POST(request: NextRequest) {
+  const body = await request.json().catch(() => ({}));
+  const messages: ChatMessage[] = body.messages ?? [];
+  const contextType: ContextType = body.contextType ?? 'global';
+  const contextId: string | null = body.contextId ?? null;
+  const conversationId: string | undefined = body.conversationId;
+
+  console.log(`[chat POST] contextType=${contextType} contextId=${contextId} conversationId=${conversationId}`);
+
+  if (!messages.length || messages[messages.length - 1].role !== 'user') {
+    return NextResponse.json({ error: 'Last message must be from user' }, { status: 400 });
+  }
+
+  // Build context
+  let entityContext = '';
+  if (contextType === 'topic' && contextId) {
+    entityContext = await buildTopicContext(contextId);
+  } else if (contextType === 'market' && contextId) {
+    entityContext = await buildMarketContext(contextId);
+  } else if (contextType === 'signal' && contextId) {
+    entityContext = await buildSignalContext(contextId);
+  }
+
+  // Load global feedback as generation guidelines
+  const existingGlobal = await db.select().from(globalFeedback).limit(50);
+  const globalContext = existingGlobal.length > 0
+    ? `\nINSTRUCCIONES DE GENERACIÓN (aplicar siempre):\n${existingGlobal.map((r) => `- ${r.text}`).join('\n')}`
+    : '';
+
+  const { hard: hardRules, soft: softRules } = await loadRules();
+  const rulesContext = `\nREGLAS DE MERCADOS:\nEstrictas:\n${hardRules.map((r) => `- ${r.id}: ${r.description}\n  Check: ${r.check}`).join('\n')}\n\nAdvertencias:\n${softRules.map((r) => `- ${r.id}: ${r.description}\n  Check: ${r.check}`).join('\n')}`;
+
+  // Load all topics and markets for global awareness
+  const [topicsSummary, marketsSummary, chatPrompt] = await Promise.all([
+    loadTopicsSummary(),
+    loadMarketsSummary(),
+    loadChatPrompt(),
+  ]);
+
+  const systemMessage = `${chatPrompt}\n\n${entityContext}${topicsSummary}${marketsSummary}${rulesContext}${globalContext}`;
+
+  // Multi-turn tool loop — continues until Claude stops calling tools
+  let apiMessages: Anthropic.MessageParam[] = messages.map((m) => ({ role: m.role, content: m.content }));
+  let reply = '';
+  let redirect: string | null = null;
+  const activityIds: string[] = [];
+
+  for (let turn = 0; turn < 20; turn++) {
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      system: systemMessage,
+      tools: TOOLS,
+      messages: apiMessages,
+    });
+
+    const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
+
+    // Collect any text from this response
+    const textParts: string[] = [];
+    for (const block of response.content) {
+      if (block.type === 'text' && block.text.trim()) {
+        textParts.push(block.text.trim());
+      }
+    }
+
+    if (response.stop_reason === 'tool_use' && toolUseBlocks.length > 0) {
+      console.log(`[chat] turn=${turn} tool_use: ${toolUseBlocks.map(b => b.name).join(', ')}`);
+      // Execute all tools and feed results back to Claude
+      apiMessages.push({ role: 'assistant', content: response.content });
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      for (const block of toolUseBlocks) {
+        const result = await executeTool(block, contextType, contextId);
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
+      }
+      apiMessages.push({ role: 'user', content: toolResults });
+      continue;
+    }
+
+    // End turn — extract text reply
+    console.log(`[chat] turn=${turn} end_turn text="${textParts.join(' ').slice(0, 100)}"`);
+
+    // Execute any remaining tool calls (side effects on end_turn)
+    for (const block of toolUseBlocks) {
+      await executeTool(block, contextType, contextId);
+    }
+
+    reply = textParts.join('\n\n');
+    break;
+  }
+
+  console.log(`[chat] final reply length=${reply.length} preview="${reply.slice(0, 100)}"`);
+  if (!reply) reply = 'No entendí, ¿podés reformular?';
+  const fullConversation: ChatMessage[] = [...messages, { role: 'assistant', content: reply }];
+
+  // Persist conversation
+  const title = messages[0].content.slice(0, 80);
+  let resultConvId = conversationId;
+
+  if (conversationId) {
+    await db
+      .update(conversations)
+      .set({ messages: fullConversation, updatedAt: new Date() })
+      .where(eq(conversations.id, conversationId));
+  } else {
+    const [created] = await db
+      .insert(conversations)
+      .values({ contextType, contextId, title, messages: fullConversation })
+      .returning({ id: conversations.id });
+    resultConvId = created.id;
+  }
+
+  // Collect activity IDs created during this request (by source=chat, last 30 seconds)
+  try {
+    const recentActivity = await db.select({ id: activityLog.id }).from(activityLog)
+      .where(and(eq(activityLog.source, 'chat'), gt(activityLog.createdAt, new Date(Date.now() - 30_000))))
+      .orderBy(desc(activityLog.createdAt))
+      .limit(10);
+    activityIds.push(...recentActivity.map((r) => r.id));
+  } catch { /* ignore */ }
+
+  // Check if the current topic was renamed (slug changed)
+  if (contextType === 'topic' && contextId) {
+    const [updatedTopic] = await db.select({ slug: topics.slug }).from(topics).where(eq(topics.id, contextId));
+    if (updatedTopic) {
+      redirect = `/dashboard/topics/${updatedTopic.slug}`;
+    }
+  }
+
+  return NextResponse.json({ reply, conversation: fullConversation, conversationId: resultConvId, redirect, activityIds });
+}
+
+// --- DELETE: delete conversation ---
+
+export async function DELETE(request: NextRequest) {
+  const id = request.nextUrl.searchParams.get('id');
+  if (!id) {
+    return NextResponse.json({ error: 'id required' }, { status: 400 });
+  }
+  await db.delete(conversations).where(eq(conversations.id, id));
+  return NextResponse.json({ ok: true });
+}

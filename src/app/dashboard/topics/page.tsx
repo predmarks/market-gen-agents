@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 interface TopicData {
@@ -29,6 +30,7 @@ function formatDate(dateStr: string): string {
 }
 
 export default function TopicsPage() {
+  const router = useRouter();
   const [topics, setTopics] = useState<TopicData[]>([]);
   const [loading, setLoading] = useState(true);
   const [dismissing, setDismissing] = useState<string | null>(null);
@@ -38,11 +40,6 @@ export default function TopicsPage() {
   const [generating, setGenerating] = useState(false);
   const [generatingSingle, setGeneratingSingle] = useState<string | null>(null);
   const [count, setCount] = useState(10);
-  const [suggestOpen, setSuggestOpen] = useState(false);
-  const [suggestDesc, setSuggestDesc] = useState('');
-  const [suggestSending, setSuggestSending] = useState(false);
-  const [suggestMsg, setSuggestMsg] = useState<string | null>(null);
-
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchTopics = useCallback(async () => {
@@ -165,32 +162,6 @@ export default function TopicsPage() {
     }
   }
 
-  async function handleSuggest(e: React.FormEvent) {
-    e.preventDefault();
-    if (!suggestDesc.trim()) return;
-    setSuggestSending(true);
-    setSuggestMsg(null);
-    try {
-      const res = await fetch('/api/topics/suggest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: suggestDesc.trim() }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        setSuggestMsg(`Error: ${data.error || 'Error al enviar'}`);
-      } else {
-        setSuggestMsg(null);
-        setSuggestDesc('');
-        await fetchTopics();
-      }
-    } catch {
-      setSuggestMsg('Error de conexión');
-    } finally {
-      setSuggestSending(false);
-    }
-  }
-
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   function toggleExpand(topicId: string) {
@@ -206,12 +177,23 @@ export default function TopicsPage() {
   }
 
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'score' | 'recency' | 'signals'>('score');
 
-  const CATEGORIES = ['Política', 'Economía', 'Deportes', 'Entretenimiento', 'Clima'];
+  const CATEGORIES = ['Política', 'Economía', 'Deportes', 'Entretenimiento', 'Clima', 'Otros'];
 
-  const filteredTopics = categoryFilter
+  const filteredTopics = (categoryFilter
     ? topics.filter((t) => t.category === categoryFilter || t.status === 'researching')
-    : topics;
+    : topics
+  ).sort((a, b) => {
+    if (a.status === 'researching') return -1;
+    if (b.status === 'researching') return 1;
+    if (sortBy === 'score') return b.score - a.score;
+    if (sortBy === 'signals') return b.signalCount - a.signalCount;
+    // recency
+    const aTime = a.lastSignalAt ? new Date(a.lastSignalAt).getTime() : 0;
+    const bTime = b.lastSignalAt ? new Date(b.lastSignalAt).getTime() : 0;
+    return bTime - aTime;
+  });
 
   const categoryCounts = CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
     acc[cat] = topics.filter((t) => t.category === cat && t.status !== 'researching').length;
@@ -223,45 +205,6 @@ export default function TopicsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Sugerir tema */}
-      <div className="border border-gray-200 rounded-lg bg-white">
-        <button
-          onClick={() => setSuggestOpen(!suggestOpen)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
-        >
-          Sugerir tema
-          <span className="text-[10px]">{suggestOpen ? '\u25B2' : '\u25BC'}</span>
-        </button>
-        {suggestOpen && (
-          <form onSubmit={handleSuggest} className="px-4 pb-4 space-y-3 border-t border-gray-100">
-            <div className="pt-3">
-              <textarea
-                value={suggestDesc}
-                onChange={(e) => setSuggestDesc(e.target.value)}
-                rows={2}
-                disabled={suggestSending}
-                placeholder="Describí el tema que querés explorar..."
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none disabled:opacity-50"
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="submit"
-                disabled={suggestSending || !suggestDesc.trim()}
-                className="px-4 py-1.5 text-sm font-medium rounded-md bg-gray-800 hover:bg-gray-900 text-white disabled:opacity-50 transition-colors cursor-pointer"
-              >
-                {suggestSending ? 'Investigando...' : 'Investigar'}
-              </button>
-            </div>
-            {suggestMsg && (
-              <p className={`text-sm ${suggestMsg.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>
-                {suggestMsg}
-              </p>
-            )}
-          </form>
-        )}
-      </div>
-
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Temas</h1>
         {topics.length > 0 && (
@@ -310,6 +253,26 @@ export default function TopicsPage() {
         </div>
       )}
 
+      {/* Sort controls */}
+      {topics.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400">Ordenar:</span>
+          {([['score', 'Score'], ['signals', 'Señales'], ['recency', 'Recientes']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setSortBy(key)}
+              className={`px-2 py-0.5 text-xs rounded border transition-colors cursor-pointer ${
+                sortBy === key
+                  ? 'bg-gray-800 text-white border-gray-800'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Bulk action bar */}
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
@@ -350,6 +313,7 @@ export default function TopicsPage() {
       <div className="grid gap-1">
         {filteredTopics.map((t) => {
           const isResearching = t.status === 'researching';
+          const isRegular = t.status === 'regular';
           const hasNewInfo = t.lastSignalAt && t.lastGeneratedAt && t.lastSignalAt > t.lastGeneratedAt;
           const isStale = t.status === 'stale';
           const isSelected = selectedIds.has(t.id);
@@ -358,7 +322,8 @@ export default function TopicsPage() {
           return (
             <div
               key={t.id}
-              className={`bg-white border rounded-lg ${
+              onClick={() => !isResearching && router.push(`/dashboard/topics/${t.slug}`)}
+              className={`bg-white border rounded-lg ${!isResearching ? 'cursor-pointer hover:border-gray-400 transition-colors' : ''} ${
                 isResearching
                   ? 'border-purple-300 bg-purple-50/30'
                   : isSelected
@@ -379,6 +344,7 @@ export default function TopicsPage() {
                     type="checkbox"
                     checked={isSelected}
                     onChange={() => toggleSelect(t.id)}
+                    onClick={(e) => e.stopPropagation()}
                     className="rounded border-gray-300 shrink-0"
                   />
                 )}
@@ -399,28 +365,21 @@ export default function TopicsPage() {
                   className={`px-1.5 py-0.5 rounded text-xs font-medium shrink-0 ${
                     isResearching
                       ? 'bg-purple-100 text-purple-600 animate-pulse'
+                      : isRegular
+                      ? 'bg-blue-100 text-blue-600'
                       : isStale
                       ? 'bg-orange-100 text-orange-600'
                       : 'bg-green-100 text-green-600'
                   }`}
                 >
-                  {isResearching ? 'investigando...' : isStale ? 'inactivo' : 'activo'}
+                  {isResearching ? 'investigando...' : isRegular ? 'recurrente' : isStale ? 'inactivo' : 'activo'}
                 </span>
                 {hasNewInfo && !isResearching && (
                   <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 shrink-0">
                     nueva info
                   </span>
                 )}
-                {isResearching ? (
-                  <span className="text-sm text-gray-500 truncate">{t.name}</span>
-                ) : (
-                  <Link
-                    href={`/dashboard/topics/${t.slug}`}
-                    className="text-sm font-medium text-gray-800 hover:text-blue-600 truncate transition-colors"
-                  >
-                    {t.name}
-                  </Link>
-                )}
+                <span className={`text-sm truncate ${isResearching ? 'text-gray-500' : 'font-medium text-gray-800'}`}>{t.name}</span>
                 {!isResearching && (
                   <>
                     <span className="text-xs text-gray-400 shrink-0">{t.category}</span>
@@ -436,7 +395,7 @@ export default function TopicsPage() {
                     )}
                   </>
                 )}
-                <div className="ml-auto flex items-center gap-2 shrink-0">
+                <div className="ml-auto flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                   {!isResearching && (
                     <>
                       <button

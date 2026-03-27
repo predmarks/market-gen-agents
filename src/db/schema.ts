@@ -138,20 +138,54 @@ export const topicSignals = pgTable(
   ],
 );
 
-export const topicConversations = pgTable(
-  'topic_conversations',
+export const conversations = pgTable(
+  'conversations',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    topicId: uuid('topic_id').notNull().references(() => topics.id, { onDelete: 'cascade' }),
+    contextType: varchar('context_type', { length: 20 }).notNull().default('global'),
+    contextId: uuid('context_id'),
     title: text('title').notNull(),
     messages: jsonb('messages').notNull().default([]).$type<{ role: 'user' | 'assistant'; content: string }[]>(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => [
-    index('topic_conversations_topic_idx').on(table.topicId),
+    index('conversations_context_idx').on(table.contextType, table.contextId),
   ],
 ).enableRLS();
+
+export const activityLog = pgTable(
+  'activity_log',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    action: varchar('action', { length: 50 }).notNull(),
+    entityType: varchar('entity_type', { length: 20 }).notNull(),
+    entityId: uuid('entity_id'),
+    entityLabel: text('entity_label'),
+    detail: jsonb('detail').$type<Record<string, unknown>>(),
+    source: varchar('source', { length: 20 }).notNull().default('ui'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('activity_log_created_idx').on(table.createdAt),
+  ],
+).enableRLS();
+
+export const rules = pgTable('rules', {
+  id: varchar('id', { length: 10 }).primaryKey(),
+  type: varchar('type', { length: 10 }).notNull(),
+  description: text('description').notNull(),
+  check: text('check').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}).enableRLS();
+
+export const config = pgTable('config', {
+  key: varchar('key', { length: 100 }).primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}).enableRLS();
 
 export const globalFeedback = pgTable('global_feedback', {
   id: uuid('id').defaultRandom().primaryKey(),

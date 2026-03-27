@@ -9,7 +9,11 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  const [topic] = await db.select().from(topics).where(eq(topics.id, id)).limit(1);
+  // Accept both UUID and slug
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  const [topic] = isUuid
+    ? await db.select().from(topics).where(eq(topics.id, id)).limit(1)
+    : await db.select().from(topics).where(eq(topics.slug, id)).limit(1);
   if (!topic) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const linkedSignals = await db
@@ -26,7 +30,7 @@ export async function GET(
     })
     .from(topicSignals)
     .innerJoin(signals, eq(topicSignals.signalId, signals.id))
-    .where(eq(topicSignals.topicId, id))
+    .where(eq(topicSignals.topicId, topic.id))
     .orderBy(desc(signals.publishedAt));
 
   return NextResponse.json({ topic, signals: linkedSignals });

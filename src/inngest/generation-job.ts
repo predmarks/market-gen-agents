@@ -5,6 +5,7 @@ import { eq, inArray, and, or, isNull, gt } from 'drizzle-orm';
 import { generateMarkets } from '@/agents/sourcer/generator';
 import { deduplicateCandidates } from '@/agents/sourcer/deduplication';
 import type { Topic } from '@/agents/sourcer/types';
+import { logActivity } from '@/lib/activity-log';
 
 export const generationJob = inngest.createFunction(
   { id: 'generation-pipeline', retries: 1 },
@@ -12,6 +13,8 @@ export const generationJob = inngest.createFunction(
   async ({ event, step }) => {
     const topicIds = (event.data?.topicIds as string[] | undefined) ?? [];
     const targetCount = Number(event.data?.count) || 10;
+    const marketType = event.data?.marketType as 'binary' | 'multi-outcome' | undefined;
+    const instruction = event.data?.instruction as string | undefined;
 
     // Step 1: Load topics
     const topicsForGeneration = await step.run('load-topics', async () => {
@@ -30,7 +33,7 @@ export const generationJob = inngest.createFunction(
           .from(topicsTable)
           .where(
             and(
-              eq(topicsTable.status, 'active'),
+              inArray(topicsTable.status, ['active', 'regular']),
               or(
                 isNull(topicsTable.lastGeneratedAt),
                 gt(topicsTable.lastSignalAt, topicsTable.lastGeneratedAt),
@@ -74,6 +77,8 @@ export const generationJob = inngest.createFunction(
         [], // dataPoints — topics already contain summarized context
         openMarkets.map((m) => m.title),
         targetCount,
+        marketType,
+        instruction,
       );
     });
 
@@ -111,6 +116,8 @@ export const generationJob = inngest.createFunction(
             sourceContext: {
               originType: 'news' as const,
               generatedAt: new Date().toISOString(),
+              topicIds: topicsForGeneration.map((t) => t.id).filter(Boolean) as string[],
+              topicNames: topicsForGeneration.map((t) => t.name),
             },
             status: 'candidate',
           })
@@ -130,6 +137,45 @@ export const generationJob = inngest.createFunction(
           .where(inArray(topicsTable.id, usedTopicIds));
       }
     });
+
+    // Log a summary entry for the global activity view
+    await logActivity('generation_completed', {
+      entityType: 'system',
+      detail: {
+        candidateCount: savedIds.length,
+        savedMarkets: savedIds.map((id, i) => ({ id, title: unique[i]?.title ?? id })),
+        topicNames: topicsForGeneration.map((t) => t.name),
+        duplicatesRemoved: candidates.length - unique.length,
+      },
+      source: 'pipeline',
+    });
+
+    // Log one entry per market so it appears on each market's detail page
+    for (let i = 0; i < savedIds.length; i++) {
+      await logActivity('generation_completed', {
+        entityType: 'market',
+        entityId: savedIds[i],
+        entityLabel: unique[i]?.title ?? savedIds[i],
+        detail: { topicNames: topicsForGeneration.map((t) => t.name) },
+        source: 'pipeline',
+      });
+    }
+
+    // Log one entry per topic so it appears on each topic's detail page
+    const usedTopicIds = topicsForGeneration.map((t) => t.id).filter(Boolean) as string[];
+    for (const t of topicsForGeneration) {
+      if (!t.id) continue;
+      await logActivity('generation_completed', {
+        entityType: 'topic',
+        entityId: t.id,
+        entityLabel: t.name,
+        detail: {
+          savedMarkets: savedIds.map((id, i) => ({ id, title: unique[i]?.title ?? id })),
+          topicSlug: t.slug,
+        },
+        source: 'pipeline',
+      });
+    }
 
     return { status: 'complete', candidates: savedIds.length, savedIds };
   },

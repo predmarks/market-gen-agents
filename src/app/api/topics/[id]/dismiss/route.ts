@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/client';
 import { topics } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
+import { logActivity } from '@/lib/activity-log';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+
+  const [topic] = await db.select({ name: topics.name, slug: topics.slug }).from(topics).where(eq(topics.id, id));
 
   let reason: string | undefined;
   try {
@@ -33,6 +36,14 @@ export async function POST(
       .set({ status: 'dismissed', updatedAt: new Date() })
       .where(eq(topics.id, id));
   }
+
+  await logActivity('topic_dismissed', {
+    entityType: 'topic',
+    entityId: id,
+    entityLabel: topic?.name,
+    detail: { reason, contextLabel: topic?.name, contextUrl: topic ? `/dashboard/topics/${topic.slug}` : undefined },
+    source: 'ui',
+  });
 
   return NextResponse.json({ ok: true });
 }

@@ -18,7 +18,7 @@ const RESEARCH_SCHEMA = {
     },
     category: {
       type: 'string' as const,
-      enum: ['Política', 'Economía', 'Deportes', 'Entretenimiento', 'Clima'],
+      enum: ['Política', 'Economía', 'Deportes', 'Entretenimiento', 'Clima', 'Otros'],
     },
     suggestedAngles: {
       type: 'array' as const,

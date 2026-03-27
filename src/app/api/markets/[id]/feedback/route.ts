@@ -103,22 +103,25 @@ ${existingGlobalTexts.length > 0 ? existingGlobalTexts.map((t, i) => `${i + 1}. 
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
   });
 
-  // Collect reply text and save actions from all content blocks
-  const replyParts: string[] = [];
+  // Collect reply text and save actions — prioritize respond tool over raw text
+  const textParts: string[] = [];
+  const toolParts: string[] = [];
   const saveActions: { market_feedback: string; global_learnings: string[] }[] = [];
 
   for (const block of response.content) {
     if (block.type === 'text' && block.text.trim()) {
-      replyParts.push(block.text.trim());
+      textParts.push(block.text.trim());
     }
     if (block.type === 'tool_use' && block.name === 'respond') {
-      replyParts.push((block.input as { message: string }).message);
+      toolParts.push((block.input as { message: string }).message);
     }
     if (block.type === 'tool_use' && block.name === 'save_feedback') {
       saveActions.push(block.input as { market_feedback: string; global_learnings: string[] });
     }
   }
 
+  // Use tool responses if available, otherwise fall back to text blocks
+  const replyParts = toolParts.length > 0 ? toolParts : textParts;
   const reply = replyParts.join('\n\n') || 'No entendí, ¿podés reformular?';
   const fullConversation = [...messages, { role: 'assistant' as const, content: reply }];
 

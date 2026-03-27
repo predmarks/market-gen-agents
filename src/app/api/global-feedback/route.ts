@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/client';
 import { globalFeedback } from '@/db/schema';
 import { desc } from 'drizzle-orm';
+import { logActivity } from '@/lib/activity-log';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,8 @@ export async function POST(request: NextRequest) {
     .insert(globalFeedback)
     .values({ text })
     .returning();
+
+  await logActivity('global_feedback_added', { entityType: 'system', detail: { text }, source: 'ui' });
 
   return NextResponse.json(row);
 }

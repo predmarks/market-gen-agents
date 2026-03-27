@@ -17,6 +17,7 @@ export const MARKET_CATEGORIES = [
   'Deportes',
   'Entretenimiento',
   'Clima',
+  'Otros',
 ] as const;
 export type MarketCategory = (typeof MARKET_CATEGORIES)[number];
 
@@ -27,6 +28,8 @@ export interface SourceContext {
   originUrl?: string;
   originText?: string;
   generatedAt: string;
+  topicIds?: string[];
+  topicNames?: string[];
 }
 
 export interface ReviewScores {

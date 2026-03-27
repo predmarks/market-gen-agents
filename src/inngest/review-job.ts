@@ -1,7 +1,7 @@
 import { inngest } from './client';
 import { db } from '@/db/client';
-import { markets, marketEvents, globalFeedback } from '@/db/schema';
-import { eq, and, asc, desc, gte } from 'drizzle-orm';
+import { markets, marketEvents, globalFeedback, signals } from '@/db/schema';
+import { eq, and, asc, desc, gte, sql } from 'drizzle-orm';
 import type { ReviewResult, Iteration, MarketSnapshot } from '@/db/types';
 import { UNFIXABLE_HARD_RULES } from '@/config/rules';
 import { THRESHOLDS } from '@/config/scoring';
@@ -220,9 +220,20 @@ export const reviewJob = inngest.createFunction(
         return { status: 'rejected', marketId, reason: `Unfixable rule: ${unfixableFail.ruleId}`, iteration: i };
       }
 
-      // Score
+      // Score — include related signal count for volume potential
       const scoring = await step.run(`score-v${i}`, async () => {
-        const result = await scoreMarket(currentMarket, verification, rulesCheck);
+        // Count recent signals in the same category as a proxy for topic relevance
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const [{ count: signalCount }] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(signals)
+          .where(and(
+            eq(signals.category, currentMarket.category),
+            gte(signals.publishedAt, thirtyDaysAgo),
+          ));
+
+        const result = await scoreMarket(currentMarket, verification, rulesCheck, signalCount);
 
         await logMarketEvent(marketId, 'scored', {
           iteration: i,

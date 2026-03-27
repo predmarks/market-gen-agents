@@ -73,7 +73,7 @@ export default function SignalsPage() {
   }, {});
   const sources = Object.entries(sourceCounts).sort(([, a], [, b]) => b - a);
 
-  const CATEGORIES = ['Política', 'Economía', 'Deportes', 'Entretenimiento', 'Clima'];
+  const CATEGORIES = ['Política', 'Economía', 'Deportes', 'Entretenimiento', 'Clima', 'Otros'];
 
   const categoryCounts = CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
     acc[cat] = signals.filter((s) => s.category === cat).length;

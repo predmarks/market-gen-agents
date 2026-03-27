@@ -24,15 +24,13 @@ const STEP_LABELS: Record<string, string> = {
   rules_checked: 'Reglas verificadas',
   scored: 'Puntuando',
   improved: 'Mejorando',
-  pipeline_proposed: 'Propuesto',
+  pipeline_opened: 'Abierto',
   pipeline_rejected: 'Rechazado',
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
   candidate: { label: 'Candidato', color: 'text-gray-600', dot: 'bg-gray-400' },
   processing: { label: 'Revisando', color: 'text-amber-600', dot: 'bg-amber-500 animate-pulse' },
-  proposal: { label: 'Propuesta', color: 'text-blue-600', dot: 'bg-blue-500' },
-  approved: { label: 'Aprobado', color: 'text-emerald-600', dot: 'bg-emerald-500' },
   open: { label: 'Abierto', color: 'text-emerald-600', dot: 'bg-emerald-500' },
   rejected: { label: 'Rechazado', color: 'text-red-600', dot: 'bg-red-500' },
   cancelled: { label: 'Cancelado', color: 'text-orange-600', dot: 'bg-orange-500' },
@@ -41,7 +39,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string 
 
 const FILTER_CARDS = [
   { key: 'review', label: 'En revisión', color: 'text-amber-600', border: 'border-amber-300', bg: 'bg-amber-50' },
-  { key: 'proposal', label: 'Propuestas', color: 'text-blue-600', border: 'border-blue-300', bg: 'bg-blue-50' },
   { key: 'open', label: 'Abiertos', color: 'text-emerald-600', border: 'border-emerald-300', bg: 'bg-emerald-50' },
   { key: 'rejected', label: 'Rechazados', color: 'text-red-600', border: 'border-red-300', bg: 'bg-red-50' },
   { key: 'cancelled', label: 'Cancelados', color: 'text-orange-600', border: 'border-orange-300', bg: 'bg-orange-50' },
@@ -79,7 +76,7 @@ function MarketDetail({ market }: { market: MarketMonitorEntry }) {
     );
   }
 
-  if (market.status === 'proposal' || market.status === 'rejected') {
+  if (market.status === 'rejected') {
     return (
       <span className={`text-xs ${config.color}`}>
         {market.score != null && market.score > 0 ? `Score ${market.score.toFixed(1)}` : ''}
@@ -354,14 +351,14 @@ export function MonitoringDashboard() {
 
   function getCount(key: string): number {
     if (key === 'review') return (counts['candidate'] ?? 0) + (counts['processing'] ?? 0);
-    if (key === 'open') return (counts['open'] ?? 0) + (counts['approved'] ?? 0);
+    if (key === 'open') return counts['open'] ?? 0;
     return counts[key] ?? 0;
   }
 
   return (
     <div className="space-y-6">
       {/* Filter cards */}
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         {FILTER_CARDS.map((card) => {
           const isActive = activeFilter === card.key;
           const count = getCount(card.key);

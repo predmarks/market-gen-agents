@@ -67,7 +67,7 @@ export const generationJob = inngest.createFunction(
       return db
         .select({ id: markets.id, title: markets.title })
         .from(markets)
-        .where(inArray(markets.status, ['open', 'approved']));
+        .where(eq(markets.status, 'open'));
     });
 
     // Step 3: Generate candidates from topics

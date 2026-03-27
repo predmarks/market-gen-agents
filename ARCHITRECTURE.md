@@ -20,16 +20,17 @@ Design implications:
 ### Market lifecycle
 
 ```
-candidate → processing → proposal → approved → open → closed → resolved
-                ↓            ↘ rejected
+candidate → processing → open → closed → resolved
+                ↓          ↘ rejected
             cancelled
 ```
 
 - `candidate`: awaiting review (fresh or re-queued after cancellation)
 - `processing`: review pipeline running in Inngest
-- `proposal` / `rejected`: pipeline output, awaiting human decision
+- `open`: pipeline passed, market is live
+- `rejected`: pipeline rejected or human rejected
 - `cancelled`: pipeline cancelled manually or due to stale processing
-- `approved` → `open` → `closed` → `resolved`: deployed market lifecycle
+- `closed` → `resolved`: market betting closed, then outcome determined
 
 No VOID state. Markets always resolve Si or No. Markets are never refunded or declared invalid.
 
@@ -126,7 +127,7 @@ Internally, markets use a richer schema with separate fields. The `description` 
 ```typescript
 interface Market {
   id: string;
-  status: 'candidate' | 'processing' | 'proposal' | 'rejected' | 'cancelled' | 'approved' | 'open' | 'closed' | 'resolved';
+  status: 'candidate' | 'processing' | 'open' | 'closed' | 'resolved' | 'rejected' | 'cancelled';
 
   // Core content (Spanish) — kept separate for agent validation
   title: string;                    // Maps to `name` on export
@@ -705,7 +706,7 @@ Salteá señales que no dan buenos mercados.
 ### Deduplication
 
 Embedding similarity check (OpenAI `text-embedding-3-small`):
-- vs. open/approved markets: reject at cosine >0.85
+- vs. open markets: reject at cosine >0.85
 - vs. batch candidates: keep highest-quality version (by `resolutionCriteria` length)
 - vs. recently rejected (30 days): warn at >0.80 (don't exclude)
 
@@ -1108,7 +1109,7 @@ predmarks-market-agents/
 │   │       ├── signals/page.tsx              # Signal ingestion: trigger + run log
 │   │       ├── topics/page.tsx               # Topic management: list, generate, dismiss, suggest
 │   │       ├── feedback/page.tsx             # Unified feedback feed + global instructions
-│   │       ├── proposals/page.tsx            # Proposals queue
+│   │       ├── mercados/page.tsx              # Markets list
 │   │       ├── open/page.tsx                 # Open markets with time-remaining indicator
 │   │       ├── archive/page.tsx              # Archived markets with search/filter
 │   │       ├── markets/[id]/
@@ -1190,7 +1191,8 @@ export const generationJob = inngest.createFunction(
   async ({ event, step }) => {
     // event.data: { topicIds?: string[], count?: number }
     const topics = await step.run('load-topics', () => /* by ID or active with fresh signals */);
-    const openMarkets = await step.run('load-open', () => /* open/approved markets */);
+    const openMarkets = await step.run('load-open', () => /* open markets */);
+
     const candidates = await step.run('generate', () => generateMarkets(topics, dataPoints, openTitles));
     const unique = await step.run('dedup', () => deduplicateCandidates(candidates, openMarkets));
     const ids = await step.run('save', () => saveCandidates(unique));
@@ -1234,8 +1236,8 @@ export const reviewJob = inngest.createFunction(
     // Emits marketEvents at each step for monitoring dashboard
     // Max 3 iterations of improve → re-check → re-score before final decision
     // Hard rule failure on unfixable rules → immediate rejection
-    // Score >= 80 (proposalScore threshold) → promote to 'proposal'
-    // Returns: { status: 'proposal'|'rejected', marketId, iteration, score }
+    // Score >= passingScore threshold → promote to 'open'
+    // Returns: { status: 'open'|'rejected', marketId, iteration, score }
   }
 );
 
@@ -1282,7 +1284,7 @@ Unified feedback feed showing all types:
 
 ### Other pages
 
-- `/dashboard/proposals` — proposals queue
+- `/dashboard/mercados` — markets list
 - `/dashboard/open` — open markets sorted by `endTimestamp` with time-remaining indicator
 - `/dashboard/archive` — archived markets with search/filter by title and status
 - `/dashboard/monitoring` → redirects to `/dashboard/signals`
@@ -1298,7 +1300,7 @@ Full market info + activity timeline + conversational feedback chat:
 
 Events are logged via `logMarketEvent()` at each pipeline step and API action:
 - Pipeline events: `pipeline_started`, `pipeline_resumed`, `data_verified`, `rules_checked`, `scored`, `improved`, `pipeline_proposed`, `pipeline_rejected`, `pipeline_cancelled`
-- Human actions: `human_approved`, `human_rejected`, `human_edited`, `human_feedback`, `archived`, `unarchived`
+- Human actions: `human_rejected`, `human_edited`, `human_feedback`, `archived`, `unarchived`
 
 Stale detection: processing markets with no events in 5+ min are flagged as "Estancado" with a resume button.
 
@@ -1310,7 +1312,7 @@ Stale detection: processing markets with no events in 5+ min are flagged as "Est
 |--------|----------|-------------|
 | GET/POST | `/api/markets` | List markets (with `?status=` filter), create new market |
 | GET/PATCH | `/api/markets/:id` | Full detail / generic update |
-| POST | `/api/markets/:id/approve` | Approve → moves to approved/open |
+| POST | `/api/markets/:id/reject` | Reject market |
 | POST | `/api/markets/:id/reject` | Reject with optional reason |
 | POST | `/api/markets/:id/edit` | Human edits + optional auto-approve |
 | POST | `/api/markets/:id/feedback` | Conversational feedback (Claude agent with `save_feedback` tool) |
@@ -1407,7 +1409,7 @@ const EVENT_TYPES = [
   'pipeline_started', 'pipeline_resumed',
   'data_verified', 'rules_checked', 'scored', 'improved',
   'pipeline_proposed', 'pipeline_rejected',
-  'human_approved', 'human_rejected', 'human_edited',
+  'human_rejected', 'human_edited',
   'human_feedback', 'pipeline_cancelled',
   'archived', 'unarchived',
   'status_changed',
@@ -1441,12 +1443,12 @@ With a 30k input tokens/min limit on Claude API:
 | Metric | Target | Alert |
 |--------|--------|-------|
 | Candidates per run | 5-15 | <3 or >25 |
-| Candidate → approved | 20-40% | <10% |
+| Candidate → open | 20-40% | <10% |
 | Data verification catches | Track | — |
 | Timing safety rejects | Track | >50% = fix prompts |
 | Resolution accuracy | >90% | <80% |
 | Emergency detections | 0 | Any = immediate alert |
-| Candidate → approved time | <24h | >48h |
+| Candidate → open time | <24h | >48h |
 | Closed → resolved time | <24h | >48h |
 
 ### Audit log

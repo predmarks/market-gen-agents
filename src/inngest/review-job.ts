@@ -265,20 +265,20 @@ export const reviewJob = inngest.createFunction(
       };
       const updatedIterations = [...iterations, iteration];
 
-      // Check if good enough → proposal
-      if (scoring.scores.overallScore >= THRESHOLDS.proposalScore && scoring.recommendation !== 'reject') {
+      // Check if good enough → open
+      if (scoring.scores.overallScore >= THRESHOLDS.passingScore && scoring.recommendation !== 'reject') {
         await step.run(`promote-v${i}`, async () => {
           await db
             .update(markets)
-            .set({ review, iterations: updatedIterations, status: 'proposal' })
+            .set({ review, iterations: updatedIterations, status: 'open', publishedAt: new Date() })
             .where(eq(markets.id, marketId));
 
-          await logMarketEvent(marketId, 'pipeline_proposed', {
+          await logMarketEvent(marketId, 'pipeline_opened', {
             iteration: i,
             detail: { score: scoring.scores.overallScore },
           });
         });
-        return { status: 'proposal', marketId, iteration: i, score: scoring.scores.overallScore };
+        return { status: 'open', marketId, iteration: i, score: scoring.scores.overallScore };
       }
 
       // Last iteration and still not good enough → reject

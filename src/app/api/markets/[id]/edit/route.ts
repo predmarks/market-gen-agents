@@ -15,15 +15,15 @@ export async function POST(
     return NextResponse.json({ error: 'Market not found' }, { status: 404 });
   }
 
-  if (market.status !== 'proposal') {
+  const editable = ['candidate', 'open'];
+  if (!editable.includes(market.status)) {
     return NextResponse.json(
-      { error: `Cannot edit a market with status "${market.status}". Must be "proposal".` },
+      { error: `Cannot edit a market with status "${market.status}". Must be one of: ${editable.join(', ')}.` },
       { status: 400 },
     );
   }
 
   const body = await request.json();
-  const { approve, ...fields } = body;
 
   const allowedFields = [
     'title',
@@ -40,14 +40,9 @@ export async function POST(
 
   const updates: Record<string, unknown> = {};
   for (const key of allowedFields) {
-    if (fields[key] !== undefined) {
-      updates[key] = fields[key];
+    if (body[key] !== undefined) {
+      updates[key] = body[key];
     }
-  }
-
-  if (approve) {
-    updates.status = 'approved';
-    updates.publishedAt = new Date();
   }
 
   const [updated] = await db
@@ -57,7 +52,7 @@ export async function POST(
     .returning();
 
   await logMarketEvent(id, 'human_edited', {
-    detail: { fields: Object.keys(updates).filter((k) => k !== 'status' && k !== 'publishedAt'), approved: !!approve },
+    detail: { fields: Object.keys(updates) },
   });
 
   return NextResponse.json(updated);

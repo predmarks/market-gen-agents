@@ -33,7 +33,7 @@ export default async function OpenMarketsPage() {
   const results = await db
     .select()
     .from(markets)
-    .where(and(inArray(markets.status, ['approved', 'open']), eq(markets.isArchived, false)))
+    .where(and(eq(markets.status, 'open'), eq(markets.isArchived, false)))
     .orderBy(asc(markets.endTimestamp));
 
   return (

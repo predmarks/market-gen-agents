@@ -38,7 +38,7 @@ export async function runSourcing(): Promise<{ candidateIds: string[] }> {
   const openMarkets = await db
     .select({ id: markets.id, title: markets.title })
     .from(markets)
-    .where(inArray(markets.status, ['open', 'approved']));
+    .where(eq(markets.status, 'open'));
 
   // Generate candidates
   const candidates = await generateMarkets(

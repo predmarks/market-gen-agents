@@ -451,9 +451,8 @@ const EVENT_LABELS: Record<MarketEventType, string> = {
   rules_checked: 'Reglas verificadas',
   scored: 'Scoring',
   improved: 'Mejora aplicada',
-  pipeline_proposed: 'Propuesto',
+  pipeline_opened: 'Abierto por pipeline',
   pipeline_rejected: 'Rechazado por pipeline',
-  human_approved: 'Aprobado',
   human_rejected: 'Rechazado',
   human_edited: 'Editado',
   human_feedback: 'Feedback humano',
@@ -488,7 +487,7 @@ function formatEvent(
       case 'scored':
         parts.push(`${detail.overallScore}/10`);
         break;
-      case 'pipeline_proposed':
+      case 'pipeline_opened':
         parts.push(`(score: ${detail.score})`);
         break;
       case 'pipeline_rejected':

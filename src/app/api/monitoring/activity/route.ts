@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
 
     // completedAt: use review timestamp for finished markets
     let completedAt: string | null = null;
-    if (review?.reviewedAt && (m.status === 'proposal' || m.status === 'rejected')) {
+    if (review?.reviewedAt && (m.status === 'open' || m.status === 'rejected')) {
       completedAt = review.reviewedAt;
     }
 

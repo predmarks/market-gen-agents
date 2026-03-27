@@ -68,7 +68,6 @@ interface MarketEntry {
 interface PipelineData {
   topics: TopicEntry[];
   candidates: MarketEntry[];
-  proposals: MarketEntry[];
   openMarkets: MarketEntry[];
   loading: boolean;
   refresh: () => void;
@@ -79,17 +78,15 @@ interface PipelineData {
 function usePipelineData(): PipelineData {
   const [topics, setTopics] = useState<TopicEntry[]>([]);
   const [candidates, setCandidates] = useState<MarketEntry[]>([]);
-  const [proposals, setProposals] = useState<MarketEntry[]>([]);
   const [openMarkets, setOpenMarkets] = useState<MarketEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
     try {
-      const [topicsRes, candidatesRes, proposalsRes, openRes] = await Promise.all([
+      const [topicsRes, candidatesRes, openRes] = await Promise.all([
         fetch('/api/topics'),
         fetch('/api/monitoring/activity?status=candidate'),
-        fetch('/api/monitoring/activity?status=proposal'),
-        fetch('/api/monitoring/activity?status=approved,open'),
+        fetch('/api/monitoring/activity?status=open'),
       ]);
 
       if (topicsRes.ok) {
@@ -99,10 +96,6 @@ function usePipelineData(): PipelineData {
       if (candidatesRes.ok) {
         const data = await candidatesRes.json();
         setCandidates(data.markets ?? []);
-      }
-      if (proposalsRes.ok) {
-        const data = await proposalsRes.json();
-        setProposals(data.markets ?? []);
       }
       if (openRes.ok) {
         const data = await openRes.json();
@@ -121,7 +114,7 @@ function usePipelineData(): PipelineData {
     return () => clearInterval(interval);
   }, [fetchAll]);
 
-  return { topics, candidates, proposals, openMarkets, loading, refresh: fetchAll };
+  return { topics, candidates, openMarkets, loading, refresh: fetchAll };
 }
 
 // --- Score badge ---
@@ -156,8 +149,8 @@ function formatDate(dateStr: string): string {
 // --- Main page ---
 
 export default function DashboardPage() {
-  const { topics, candidates, proposals, openMarkets, loading, refresh } = usePipelineData();
-  const { widths, onMouseDown } = useResizableColumns(4, [30, 25, 25, 20]);
+  const { topics, candidates, openMarkets, loading, refresh } = usePipelineData();
+  const { widths, onMouseDown } = useResizableColumns(3, [35, 30, 35]);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const toggleCollapse = (i: number) => setCollapsed((prev) => {
     const next = new Set(prev);
@@ -176,10 +169,6 @@ export default function DashboardPage() {
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set());
   const [reviewingCandidates, setReviewingCandidates] = useState(false);
   const [rejectingCandidates, setRejectingCandidates] = useState(false);
-
-  // Proposal action state
-  const [approvingId, setApprovingId] = useState<string | null>(null);
-  const [rejectingId, setRejectingId] = useState<string | null>(null);
 
   // --- Handlers ---
 
@@ -280,26 +269,6 @@ export default function DashboardPage() {
       refresh();
     } catch { /* ignore */ } finally {
       setRejectingCandidates(false);
-    }
-  }
-
-  async function handleApprove(id: string) {
-    setApprovingId(id);
-    try {
-      await fetch(`/api/markets/${id}/approve`, { method: 'POST' });
-      refresh();
-    } catch { /* ignore */ } finally {
-      setApprovingId(null);
-    }
-  }
-
-  async function handleReject(id: string) {
-    setRejectingId(id);
-    try {
-      await fetch(`/api/markets/${id}/reject`, { method: 'POST' });
-      refresh();
-    } catch { /* ignore */ } finally {
-      setRejectingId(null);
     }
   }
 
@@ -465,67 +434,17 @@ export default function DashboardPage() {
       {/* Divider 2 */}
       <div className="w-1.5 bg-gray-300 hover:bg-blue-400 cursor-col-resize shrink-0 transition-colors" onMouseDown={(e) => onMouseDown(1, e)} />
 
-      {/* Column 3: Propuestas */}
+      {/* Column 3: Abiertos */}
       <div className={`flex flex-col min-w-0 ${collapsed.has(2) ? 'w-10 !flex-none' : ''}`} style={collapsed.has(2) ? {} : { width: `${widths[2]}%` }}>
         <div className="sticky top-0 bg-white px-3 py-2 border-b border-gray-200 z-10">
           <button onClick={() => toggleCollapse(2)} className="flex items-center gap-1.5 cursor-pointer">
             <span className="text-[10px] text-gray-400">{collapsed.has(2) ? '▶' : '▼'}</span>
-            <h2 className="text-sm font-medium text-gray-900">{collapsed.has(2) ? 'P' : 'Propuestas'}</h2>
-            {!collapsed.has(2) && <span className="text-gray-400 font-normal text-sm">({proposals.length})</span>}
+            <h2 className="text-sm font-medium text-gray-900">{collapsed.has(2) ? 'A' : 'Abiertos'}</h2>
+            {!collapsed.has(2) && <span className="text-gray-400 font-normal text-sm">({openMarkets.length})</span>}
           </button>
         </div>
 
         {!collapsed.has(2) && <><div className="flex-1 overflow-y-auto">
-          {proposals.length === 0 && (
-            <div className="px-3 py-8 text-sm text-gray-400 text-center">No hay propuestas</div>
-          )}
-          {proposals.map((m) => (
-            <div
-              key={m.id}
-              className="flex items-center gap-1.5 px-3 py-2 hover:bg-white transition-colors border-b border-gray-100"
-            >
-              <Link
-                href={`/dashboard/markets/${m.id}`}
-                className="text-sm text-gray-800 truncate hover:text-blue-600 flex-1 min-w-0"
-              >
-                {m.title}
-              </Link>
-              {m.score != null && <ScoreBadge score={m.score} />}
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={() => handleApprove(m.id)}
-                  disabled={approvingId === m.id}
-                  className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-green-100 hover:bg-green-200 text-green-700 disabled:opacity-50 transition-colors cursor-pointer"
-                >
-                  {approvingId === m.id ? '...' : 'Aprobar'}
-                </button>
-                <button
-                  onClick={() => handleReject(m.id)}
-                  disabled={rejectingId === m.id}
-                  className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-100 hover:bg-red-200 text-red-700 disabled:opacity-50 transition-colors cursor-pointer"
-                >
-                  {rejectingId === m.id ? '...' : 'Rechazar'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div></>}
-      </div>
-
-      {/* Divider 3 */}
-      <div className="w-1.5 bg-gray-300 hover:bg-blue-400 cursor-col-resize shrink-0 transition-colors" onMouseDown={(e) => onMouseDown(2, e)} />
-
-      {/* Column 4: Abiertos */}
-      <div className={`flex flex-col min-w-0 ${collapsed.has(3) ? 'w-10 !flex-none' : ''}`} style={collapsed.has(3) ? {} : { width: `${widths[3]}%` }}>
-        <div className="sticky top-0 bg-white px-3 py-2 border-b border-gray-200 z-10">
-          <button onClick={() => toggleCollapse(3)} className="flex items-center gap-1.5 cursor-pointer">
-            <span className="text-[10px] text-gray-400">{collapsed.has(3) ? '▶' : '▼'}</span>
-            <h2 className="text-sm font-medium text-gray-900">{collapsed.has(3) ? 'A' : 'Abiertos'}</h2>
-            {!collapsed.has(3) && <span className="text-gray-400 font-normal text-sm">({openMarkets.length})</span>}
-          </button>
-        </div>
-
-        {!collapsed.has(3) && <><div className="flex-1 overflow-y-auto">
           {openMarkets.length === 0 && (
             <div className="px-3 py-8 text-sm text-gray-400 text-center">No hay mercados abiertos</div>
           )}

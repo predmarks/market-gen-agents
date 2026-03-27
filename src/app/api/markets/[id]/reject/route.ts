@@ -16,9 +16,10 @@ export async function POST(
     return NextResponse.json({ error: 'Market not found' }, { status: 404 });
   }
 
-  if (market.status !== 'proposal' && market.status !== 'candidate') {
+  const rejectable = ['candidate', 'open'];
+  if (!rejectable.includes(market.status)) {
     return NextResponse.json(
-      { error: `Cannot reject a market with status "${market.status}". Must be "proposal" or "candidate".` },
+      { error: `Cannot reject a market with status "${market.status}". Must be one of: ${rejectable.join(', ')}.` },
       { status: 400 },
     );
   }

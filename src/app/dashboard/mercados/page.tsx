@@ -16,8 +16,6 @@ interface MarketEntry {
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   candidate: { label: 'Candidato', className: 'bg-gray-100 text-gray-600' },
   processing: { label: 'Revisando', className: 'bg-blue-100 text-blue-700' },
-  proposal: { label: 'Propuesta', className: 'bg-purple-100 text-purple-700' },
-  approved: { label: 'Aprobado', className: 'bg-green-100 text-green-700' },
   open: { label: 'Abierto', className: 'bg-green-100 text-green-700' },
   resolved: { label: 'Resuelto', className: 'bg-gray-100 text-gray-500' },
   rejected: { label: 'Rechazado', className: 'bg-red-100 text-red-600' },
@@ -30,8 +28,7 @@ const FILTERS = [
   { key: 'all', label: 'Activos', statuses: null },
   { key: 'candidate', label: 'Candidatos', statuses: ['candidate'] },
   { key: 'processing', label: 'En revisión', statuses: ['processing'] },
-  { key: 'proposal', label: 'Propuestas', statuses: ['proposal'] },
-  { key: 'open', label: 'Abiertos', statuses: ['approved', 'open'] },
+  { key: 'open', label: 'Abiertos', statuses: ['open'] },
   { key: 'archived', label: 'Archivados', statuses: ARCHIVED_STATUSES },
 ];
 
@@ -99,8 +96,8 @@ export default function MercadosPage() {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
-  // Selection — only proposals are selectable (have approve/reject actions)
-  const selectableMarkets = filtered.filter((m) => m.status === 'proposal');
+  // Selection — all non-archived markets are selectable
+  const selectableMarkets = filtered.filter((m) => !ARCHIVED_STATUSES.includes(m.status));
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -121,16 +118,6 @@ export default function MercadosPage() {
 
   const allSelected = selectableMarkets.length > 0 && selectedIds.size === selectableMarkets.length;
 
-  async function handleApprove(id: string) {
-    setActionLoading(id);
-    try {
-      await fetch(`/api/markets/${id}/approve`, { method: 'POST' });
-      fetchAll();
-    } catch { /* ignore */ } finally {
-      setActionLoading(null);
-    }
-  }
-
   async function handleReject(id: string) {
     setActionLoading(id);
     try {
@@ -141,13 +128,16 @@ export default function MercadosPage() {
     }
   }
 
-  async function handleBulkAction(action: 'approve' | 'reject') {
+  // Rejectable statuses
+  const selectedRejectable = markets.filter((m) => selectedIds.has(m.id) && ['candidate', 'open'].includes(m.status));
+
+  async function handleBulkReject() {
+    if (selectedRejectable.length === 0) return;
     setBulkLoading(true);
     try {
-      const ids = Array.from(selectedIds);
       await Promise.all(
-        ids.map((id) =>
-          fetch(`/api/markets/${id}/${action}`, { method: 'POST' })
+        selectedRejectable.map((m) =>
+          fetch(`/api/markets/${m.id}/reject`, { method: 'POST' })
         )
       );
       setSelectedIds(new Set());
@@ -225,18 +215,11 @@ export default function MercadosPage() {
           </span>
           <div className="flex items-center gap-2 ml-auto">
             <button
-              onClick={() => handleBulkAction('approve')}
-              disabled={bulkLoading}
-              className="px-4 py-1.5 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 transition-colors cursor-pointer"
-            >
-              {bulkLoading ? '...' : 'Aprobar seleccionados'}
-            </button>
-            <button
-              onClick={() => handleBulkAction('reject')}
-              disabled={bulkLoading}
+              onClick={handleBulkReject}
+              disabled={bulkLoading || selectedRejectable.length === 0}
               className="px-4 py-1.5 text-sm font-medium rounded-md bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 transition-colors cursor-pointer"
             >
-              {bulkLoading ? '...' : 'Rechazar seleccionados'}
+              {bulkLoading ? '...' : `Rechazar ${selectedRejectable.length}`}
             </button>
           </div>
         </div>
@@ -251,7 +234,8 @@ export default function MercadosPage() {
       <div className="grid gap-1">
         {filtered.map((m) => {
           const badge = STATUS_BADGE[m.status] ?? STATUS_BADGE.candidate;
-          const isProposal = m.status === 'proposal';
+          const isArchived = ARCHIVED_STATUSES.includes(m.status);
+          const isRejectable = ['candidate', 'open'].includes(m.status);
           const isSelected = selectedIds.has(m.id);
 
           return (
@@ -265,7 +249,7 @@ export default function MercadosPage() {
               }`}
             >
               <div className="flex items-center gap-2 px-3 py-2">
-                {isProposal ? (
+                {!isArchived ? (
                   <input
                     type="checkbox"
                     checked={isSelected}
@@ -288,23 +272,14 @@ export default function MercadosPage() {
                   <span className="text-[10px] text-orange-500 shrink-0">stale</span>
                 )}
                 <div className="ml-auto flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                  {isProposal && (
-                    <>
-                      <button
-                        onClick={() => handleApprove(m.id)}
-                        disabled={actionLoading === m.id || bulkLoading}
-                        className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-green-100 hover:bg-green-200 text-green-700 disabled:opacity-50 transition-colors cursor-pointer"
-                      >
-                        {actionLoading === m.id ? '...' : 'Aprobar'}
-                      </button>
-                      <button
-                        onClick={() => handleReject(m.id)}
-                        disabled={actionLoading === m.id || bulkLoading}
-                        className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-100 hover:bg-red-200 text-red-700 disabled:opacity-50 transition-colors cursor-pointer"
-                      >
-                        {actionLoading === m.id ? '...' : 'Rechazar'}
-                      </button>
-                    </>
+                  {isRejectable && (
+                    <button
+                      onClick={() => handleReject(m.id)}
+                      disabled={actionLoading === m.id || bulkLoading}
+                      className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-100 hover:bg-red-200 text-red-700 disabled:opacity-50 transition-colors cursor-pointer"
+                    >
+                      {actionLoading === m.id ? '...' : 'Rechazar'}
+                    </button>
                   )}
                 </div>
               </div>

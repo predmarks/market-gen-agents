@@ -91,25 +91,17 @@ export function MarketActions({ marketId, status, iterations, isArchived }: Mark
           />
         )}
 
-        {status === 'proposal' && (
-          <>
-            <ActionButton
-              label="Aprobar"
-              loading={loading === 'approve'}
-              onClick={() => handleAction('approve')}
-              variant="success"
-            />
-            <ActionButton
-              label="Rechazar"
-              loading={loading === 'reject'}
-              onClick={() =>
-                handleAction('reject', {
-                  body: JSON.stringify({ reason: 'Rejected by reviewer' }),
-                })
-              }
-              variant="danger"
-            />
-          </>
+        {(status === 'candidate' || status === 'open') && (
+          <ActionButton
+            label="Rechazar"
+            loading={loading === 'reject'}
+            onClick={() =>
+              handleAction('reject', {
+                body: JSON.stringify({ reason: 'Rejected by reviewer' }),
+              })
+            }
+            variant="danger"
+          />
         )}
 
         {(status === 'closed' || status === 'open') && (

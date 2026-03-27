@@ -643,6 +643,19 @@ async function executeTool(block: Anthropic.ToolUseBlock, contextType: ContextTy
         source: 'chat',
       });
     }
+    // Save instruction as a suggested angle on each topic
+    if (instruction) {
+      for (const topicId of topicIds) {
+        const [topic] = await db.select({ suggestedAngles: topics.suggestedAngles }).from(topics).where(eq(topics.id, topicId));
+        if (topic) {
+          const existing = topic.suggestedAngles ?? [];
+          if (!existing.includes(instruction)) {
+            await db.update(topics).set({ suggestedAngles: [...existing, instruction] }).where(eq(topics.id, topicId));
+          }
+        }
+      }
+    }
+
     return `Generación de ${count ?? 5} mercados ${marketType === 'multi-outcome' ? 'multi-opción' : marketType === 'binary' ? 'binarios' : ''} iniciada desde ${topicIds.length} tema(s).${instruction ? ` Instrucción: "${instruction}"` : ''}`;
   }
 

@@ -150,6 +150,7 @@ export function MiniChat() {
     setActiveConvId(null);
     setMessages([]);
     setError(null);
+    setActivityEntries([]);
     setPollingEntries([]);
     if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
   }, [pathname]);

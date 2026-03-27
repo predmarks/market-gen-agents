@@ -127,7 +127,21 @@ export const generationJob = inngest.createFunction(
       return ids;
     });
 
-    // Step 6: Update lastGeneratedAt on used topics
+    // Step 6: Append generated market titles to topic suggestedAngles
+    await step.run('update-suggested-angles', async () => {
+      for (const topic of topicsForGeneration) {
+        if (!topic.id) continue;
+        const newAngles = unique.map((c) => c.title);
+        const existing = topic.suggestedAngles ?? [];
+        const merged = [...new Set([...existing, ...newAngles])];
+        await db
+          .update(topicsTable)
+          .set({ suggestedAngles: merged })
+          .where(eq(topicsTable.id, topic.id));
+      }
+    });
+
+    // Step 7: Update lastGeneratedAt on used topics
     await step.run('update-topic-timestamps', async () => {
       const usedTopicIds = topicsForGeneration.map((t) => t.id).filter(Boolean) as string[];
       if (usedTopicIds.length > 0) {

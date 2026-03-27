@@ -265,12 +265,16 @@ export const reviewJob = inngest.createFunction(
       };
       const updatedIterations = [...iterations, iteration];
 
-      // Check if good enough → open
-      if (scoring.scores.overallScore >= THRESHOLDS.passingScore && scoring.recommendation !== 'reject') {
-        await step.run(`promote-v${i}`, async () => {
+      // Check if good enough → reviewed (stays as candidate for human to promote)
+      const hasHardRuleFail = rulesCheck.hardRuleResults.some((r) => !r.passed);
+      const isPassing = scoring.scores.overallScore >= THRESHOLDS.passingScore && scoring.recommendation !== 'reject' && !hasHardRuleFail;
+
+      if (isPassing && (!feedback || i === THRESHOLDS.maxIterations)) {
+        // No feedback to address, or last iteration — finish now
+        await step.run(`finish-v${i}`, async () => {
           await db
             .update(markets)
-            .set({ review, iterations: updatedIterations, status: 'open', publishedAt: new Date() })
+            .set({ review, iterations: updatedIterations, status: 'candidate' })
             .where(eq(markets.id, marketId));
 
           await logMarketEvent(marketId, 'pipeline_opened', {
@@ -278,7 +282,7 @@ export const reviewJob = inngest.createFunction(
             detail: { score: scoring.scores.overallScore },
           });
         });
-        return { status: 'open', marketId, iteration: i, score: scoring.scores.overallScore };
+        return { status: 'candidate', marketId, iteration: i, score: scoring.scores.overallScore };
       }
 
       // Last iteration and still not good enough → reject

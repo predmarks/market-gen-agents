@@ -140,8 +140,24 @@ export default async function TopicDetailPage({ params }: Props) {
           </div>
         )}
 
+        {/* Activity */}
+        {activity.length > 0 && (
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="px-5 py-3 border-b border-gray-100">
+              <h2 className="text-sm font-medium text-gray-500">Actividad</h2>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {activity.map((entry) => (
+                <div key={entry.id} className="px-4 py-2.5">
+                  <ActivityCard entry={{ ...entry, detail: entry.detail as Record<string, unknown> | null, createdAt: entry.createdAt.toISOString() }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Linked signals */}
-        <div className="bg-white rounded-lg border border-gray-200">
+        <div className="bg-white rounded-lg border border-gray-200 mt-6">
           <div className="px-5 py-3 border-b border-gray-100">
             <h2 className="text-sm font-medium text-gray-500">Señales ({linkedSignals.length})</h2>
           </div>
@@ -180,22 +196,6 @@ export default async function TopicDetailPage({ params }: Props) {
             </div>
           )}
         </div>
-
-        {/* Activity */}
-        {activity.length > 0 && (
-          <div className="bg-white rounded-lg border border-gray-200 mt-6">
-            <div className="px-5 py-3 border-b border-gray-100">
-              <h2 className="text-sm font-medium text-gray-500">Actividad</h2>
-            </div>
-            <div className="divide-y divide-gray-50">
-              {activity.map((entry) => (
-                <div key={entry.id} className="px-4 py-2.5">
-                  <ActivityCard entry={{ ...entry, detail: entry.detail as Record<string, unknown> | null, createdAt: entry.createdAt.toISOString() }} />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
     </div>
   );
 }

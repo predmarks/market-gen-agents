@@ -538,7 +538,7 @@ function Section({
   return (
     <div className={`border-l-3 ${borderColor} pl-3`}>
       <h3 className="text-base font-semibold text-gray-700 mb-1">{title}</h3>
-      <div>{children}</div>
+      <div className="text-sm">{children}</div>
     </div>
   );
 }

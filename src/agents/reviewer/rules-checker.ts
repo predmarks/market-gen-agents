@@ -97,6 +97,7 @@ Fecha de hoy: ${new Date().toISOString().split('T')[0]}`;
     system: SYSTEM_PROMPT,
     userMessage,
     outputSchema: OUTPUT_SCHEMA,
+    operation: 'rules_check',
   });
 
   return {

@@ -34,6 +34,7 @@ export function Nav() {
         {navLink('/dashboard/signals', 'Señales')}
         {navLink('/dashboard/rules', 'Reglas')}
         {navLink('/dashboard/activity', 'Log')}
+        {navLink('/dashboard/usage', 'Uso')}
 
         <form action={logout} className="ml-auto">
           <button

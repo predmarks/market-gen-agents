@@ -253,8 +253,12 @@ export function MiniChat() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Error');
+        let errorMsg = `Error (${res.status})`;
+        try {
+          const data = await res.json();
+          errorMsg = data.error || errorMsg;
+        } catch { /* empty response body */ }
+        throw new Error(errorMsg);
       }
 
       const { conversation, conversationId, redirect, activityIds } = await res.json();

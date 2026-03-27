@@ -187,6 +187,22 @@ export const config = pgTable('config', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }).enableRLS();
 
+export const llmUsage = pgTable(
+  'llm_usage',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    operation: varchar('operation', { length: 50 }).notNull(),
+    model: varchar('model', { length: 50 }).notNull(),
+    inputTokens: integer('input_tokens').notNull(),
+    outputTokens: integer('output_tokens').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('llm_usage_operation_idx').on(table.operation),
+    index('llm_usage_created_idx').on(table.createdAt),
+  ],
+).enableRLS();
+
 export const globalFeedback = pgTable('global_feedback', {
   id: uuid('id').defaultRandom().primaryKey(),
   text: text('text').notNull(),

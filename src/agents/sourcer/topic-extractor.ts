@@ -201,6 +201,7 @@ export async function updateTopics(
   const { result } = await callClaude<{ topicUpdates: TopicUpdate[] }>({
     system: SYSTEM_PROMPT,
     model: 'opus',
+    operation: 'extract_topics',
     userMessage: `HOY: ${today}
 ${editorFeedback}
 TEMAS EXISTENTES ACTIVOS (${existingTopics.length}):

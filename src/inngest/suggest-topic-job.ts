@@ -1,12 +1,13 @@
 import { inngest } from './client';
 import { db } from '@/db/client';
 import { topics as topicsTable, signals as signalsTable, topicSignals } from '@/db/schema';
-import { eq, inArray, isNotNull } from 'drizzle-orm';
+import { eq, inArray, isNotNull, gte, desc } from 'drizzle-orm';
 import { callClaudeWithSearch } from '@/lib/llm';
 import { updateTopics } from '@/agents/sourcer/topic-extractor';
 import { slugify } from '@/agents/sourcer/types';
 import type { Topic, SourceSignal } from '@/agents/sourcer/types';
 import type { MarketCategory } from '@/db/types';
+import { logActivity } from '@/lib/activity-log';
 
 const RESEARCH_SCHEMA = {
   type: 'object' as const,
@@ -89,12 +90,13 @@ export const suggestTopicJob = inngest.createFunction(
         userMessage: description,
         outputSchema: RESEARCH_SCHEMA,
         model: 'opus',
+        operation: 'research_topic',
       });
       return result;
     });
 
-    // Step 2: Save signals from research sources, then consolidate topic (dedup with existing)
-    const topicId = await step.run('consolidate-topic', async () => {
+    // Step 2: Save signals, load existing related signals, consolidate topic
+    const result = await step.run('consolidate-topic', async () => {
       // Save research sources as signals
       const savedSignals: SourceSignal[] = [];
       for (const source of research.sources ?? []) {
@@ -134,6 +136,44 @@ export const suggestTopicJob = inngest.createFunction(
         }
       }
 
+      // Load existing signals in the same category (last 30 days) for richer context
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const existingSignals = await db
+        .select({
+          id: signalsTable.id,
+          type: signalsTable.type,
+          text: signalsTable.text,
+          summary: signalsTable.summary,
+          url: signalsTable.url,
+          source: signalsTable.source,
+          publishedAt: signalsTable.publishedAt,
+          category: signalsTable.category,
+        })
+        .from(signalsTable)
+        .where(gte(signalsTable.publishedAt, thirtyDaysAgo))
+        .orderBy(desc(signalsTable.publishedAt))
+        .limit(100);
+
+      // Combine: research signals first, then existing (deduped by ID)
+      const seenIds = new Set(savedSignals.map((s) => s.id).filter(Boolean));
+      const allSignals: SourceSignal[] = [...savedSignals];
+      for (const s of existingSignals) {
+        if (seenIds.has(s.id)) continue;
+        seenIds.add(s.id);
+        allSignals.push({
+          id: s.id,
+          type: s.type as SourceSignal['type'],
+          text: s.text,
+          summary: s.summary ?? undefined,
+          url: s.url ?? undefined,
+          source: s.source,
+          publishedAt: s.publishedAt.toISOString(),
+          entities: [],
+          category: (s.category ?? undefined) as SourceSignal['category'],
+        });
+      }
+
       // Load existing active/stale topics for dedup
       const existingTopicRows = await db
         .select()
@@ -159,17 +199,18 @@ export const suggestTopicJob = inngest.createFunction(
         }));
 
       // Let the LLM decide: update existing topic or create new
-      const topicUpdates = await updateTopics(savedSignals, existingTopics);
+      const topicUpdates = await updateTopics(allSignals, existingTopics);
 
       const now = new Date();
 
       // Build signal index → DB ID map (1-based, as updateTopics uses)
       const signalIdMap = new Map<number, string>();
-      savedSignals.forEach((s, i) => {
+      allSignals.forEach((s, i) => {
         if (s.id) signalIdMap.set(i + 1, s.id);
       });
 
       let resolvedTopicId = placeholderTopicId;
+      let action: 'created' | 'updated' | 'merged' = 'created';
 
       if (topicUpdates.length > 0) {
         const update = topicUpdates[0]; // Take the primary result
@@ -184,7 +225,7 @@ export const suggestTopicJob = inngest.createFunction(
                 summary: update.summary,
                 score: update.score,
                 suggestedAngles: update.suggestedAngles,
-                signalCount: existing.signalCount + update.signalIndices.length,
+                signalCount: existing.signalCount + savedSignals.length,
                 lastSignalAt: now,
                 status: 'active',
                 updatedAt: now,
@@ -192,6 +233,7 @@ export const suggestTopicJob = inngest.createFunction(
               .where(eq(topicsTable.id, existing.id));
 
             resolvedTopicId = existing.id;
+            action = 'merged';
 
             // Delete the placeholder since we merged into existing
             if (placeholderTopicId && placeholderTopicId !== existing.id) {
@@ -219,10 +261,11 @@ export const suggestTopicJob = inngest.createFunction(
               })
               .where(eq(topicsTable.id, placeholderTopicId));
             resolvedTopicId = placeholderTopicId;
+            action = update.action === 'update' ? 'updated' : 'created';
           }
         }
       } else {
-        // No topic updates from LLM — just update the placeholder with research data
+        // No topic updates from LLM — update the placeholder with research data directly
         if (placeholderTopicId) {
           await db
             .update(topicsTable)
@@ -242,6 +285,32 @@ export const suggestTopicJob = inngest.createFunction(
         }
       }
 
+      // Safety: ensure placeholder is never left in "researching" status
+      if (placeholderTopicId) {
+        const [check] = await db
+          .select({ status: topicsTable.status })
+          .from(topicsTable)
+          .where(eq(topicsTable.id, placeholderTopicId));
+        if (check && check.status === 'researching') {
+          await db
+            .update(topicsTable)
+            .set({
+              name: research.name,
+              slug: slugify(research.name),
+              summary: research.summary,
+              category: research.category,
+              suggestedAngles: research.suggestedAngles,
+              score: research.score,
+              status: 'active',
+              signalCount: savedSignals.length,
+              lastSignalAt: now,
+              updatedAt: now,
+            })
+            .where(eq(topicsTable.id, placeholderTopicId));
+          resolvedTopicId = placeholderTopicId;
+        }
+      }
+
       // Link signals to the resolved topic
       if (resolvedTopicId) {
         for (const idx of topicUpdates[0]?.signalIndices ?? []) {
@@ -254,7 +323,7 @@ export const suggestTopicJob = inngest.createFunction(
           }
         }
 
-        // Also link any signals not captured by indices (fallback)
+        // Also link all saved signals (research sources) directly
         for (const s of savedSignals) {
           if (s.id) {
             await db
@@ -265,9 +334,46 @@ export const suggestTopicJob = inngest.createFunction(
         }
       }
 
-      return resolvedTopicId;
+      // Get resolved topic details for logging
+      let topicName = research.name;
+      let topicSlug = slugify(research.name);
+      if (resolvedTopicId) {
+        const [resolved] = await db
+          .select({ name: topicsTable.name, slug: topicsTable.slug })
+          .from(topicsTable)
+          .where(eq(topicsTable.id, resolvedTopicId));
+        if (resolved) {
+          topicName = resolved.name;
+          topicSlug = resolved.slug;
+        }
+      }
+
+      return {
+        topicId: resolvedTopicId,
+        topicName,
+        topicSlug,
+        action,
+        signals: savedSignals.map((s) => ({ source: s.source, text: s.text.slice(0, 150), url: s.url ?? null })),
+      };
     });
 
-    return { topicId };
+    // Step 3: Log completion
+    await step.run('log-completion', async () => {
+      await logActivity('topic_research_completed', {
+        entityType: 'topic',
+        entityId: result.topicId ?? undefined,
+        entityLabel: result.topicName,
+        detail: {
+          description,
+          action: result.action,
+          topicSlug: result.topicSlug,
+          signalCount: result.signals.length,
+          signals: result.signals,
+        },
+        source: 'pipeline',
+      });
+    });
+
+    return { topicId: result.topicId };
   },
 );

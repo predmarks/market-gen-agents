@@ -4,6 +4,7 @@ import { db } from '@/db/client';
 import { markets, globalFeedback } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { logMarketEvent } from '@/lib/market-events';
+import { logUsage } from '@/lib/llm';
 import { HARD_RULES, SOFT_RULES } from '@/config/rules';
 
 const client = new Anthropic({ maxRetries: 2 });
@@ -102,6 +103,8 @@ ${existingGlobalTexts.length > 0 ? existingGlobalTexts.map((t, i) => `${i + 1}. 
     tools: TOOLS,
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
   });
+
+  logUsage('feedback', 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens);
 
   // Collect reply text and save actions — prioritize respond tool over raw text
   const textParts: string[] = [];

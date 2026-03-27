@@ -292,6 +292,7 @@ ${formatTopics(topics)}`;
     outputSchema: OUTPUT_SCHEMA,
     outputToolName: 'generate_markets',
     model: 'opus',
+    operation: 'generate_markets',
   });
 
   return result.candidates;

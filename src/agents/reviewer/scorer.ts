@@ -144,6 +144,7 @@ Puntuá cada dimensión (0-10) con razonamiento, y dá una recomendación:
     system: SYSTEM_PROMPT,
     userMessage,
     outputSchema: OUTPUT_SCHEMA,
+    operation: 'score_market',
   });
 
   // Compute overallScore in code for mathematical accuracy

@@ -25,6 +25,7 @@ const ACTION_BADGE: Record<string, { label: string; className: string }> = {
   topics_merged: { label: 'Temas fusionados', className: 'bg-green-100 text-green-700' },
   signals_linked: { label: 'Señales vinculadas', className: 'bg-blue-100 text-blue-700' },
   topic_research_started: { label: 'Investigación', className: 'bg-purple-100 text-purple-700' },
+  topic_research_completed: { label: 'Investigación completada', className: 'bg-purple-100 text-purple-700' },
   topic_rescored: { label: 'Re-puntuado', className: 'bg-green-100 text-green-700' },
   // Markets
   market_updated: { label: 'Mercado actualizado', className: 'bg-green-100 text-green-700' },
@@ -44,6 +45,13 @@ const ACTION_BADGE: Record<string, { label: string; className: string }> = {
   review_started: { label: 'Revisión iniciada', className: 'bg-purple-100 text-purple-700' },
   generation_prompt_updated: { label: 'Prompt generación', className: 'bg-amber-100 text-amber-700' },
   chat_prompt_updated: { label: 'Prompt chat', className: 'bg-amber-100 text-amber-700' },
+  // Resolution
+  resolution_flagged: { label: 'Resolución sugerida', className: 'bg-green-100 text-green-700' },
+  resolution_emergency: { label: 'Emergencia resolución', className: 'bg-red-100 text-red-700' },
+  resolution_unclear: { label: 'Resolución parcial', className: 'bg-yellow-100 text-yellow-700' },
+  resolution_confirmed: { label: 'Resolución confirmada', className: 'bg-green-100 text-green-700' },
+  resolution_dismissed: { label: 'Resolución descartada', className: 'bg-gray-100 text-gray-600' },
+  resolution_check_started: { label: 'Check resolución', className: 'bg-purple-100 text-purple-700' },
 };
 
 function formatTime(iso: string): string {
@@ -70,7 +78,8 @@ function CollapsibleList({ label, children }: { label: string; children: React.R
 function ContentView({ action, detail }: { action: string; detail: Record<string, unknown> }) {
   if (action === 'ingestion_completed') {
     const signalsBySource = detail.signalsBySource as Record<string, number> | undefined;
-    const signalsList = detail.signals as { source: string; text: string }[] | undefined;
+    const signalsList = detail.signals as { source: string; text: string; url?: string | null }[] | undefined;
+    const topicsList = detail.topics as { id: string; name: string; slug: string }[] | undefined;
     return (
       <div className="space-y-1">
         <p className="text-sm text-gray-700">{detail.signalsCount as number} señales · {detail.topicCount as number} temas actualizados</p>
@@ -83,15 +92,103 @@ function ContentView({ action, detail }: { action: string; detail: Record<string
             ))}
           </div>
         )}
-        {signalsList && signalsList.length > 0 && (
-          <div className="space-y-0.5 mt-1">
-            {signalsList.map((s, i) => (
-              <p key={i} className="text-[11px] text-gray-600">
-                <span className="text-gray-400">[{s.source}]</span> {s.text}
-              </p>
-            ))}
-          </div>
+        {topicsList && topicsList.length > 0 && (
+          <CollapsibleList label={`${topicsList.length} temas`}>
+            <div className="space-y-0.5">
+              {topicsList.map((t) => (
+                <Link key={t.id} href={`/dashboard/topics/${t.slug}`} onClick={(e) => e.stopPropagation()} className="block text-[11px] text-blue-600 hover:underline truncate">
+                  {t.name}
+                </Link>
+              ))}
+            </div>
+          </CollapsibleList>
         )}
+        {signalsList && signalsList.length > 0 && (
+          <CollapsibleList label={`${signalsList.length} señales`}>
+            <div className="space-y-0.5">
+              {signalsList.map((s, i) => (
+                <p key={i} className="text-[11px] text-gray-600">
+                  <span className="text-gray-400">[{s.source}]</span>{' '}
+                  {s.url ? (
+                    <a href={s.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-blue-600 hover:underline">{s.text}</a>
+                  ) : s.text}
+                </p>
+              ))}
+            </div>
+          </CollapsibleList>
+        )}
+      </div>
+    );
+  }
+
+  if (action === 'topic_research_completed') {
+    const resAction = detail.action as string | undefined;
+    const signalsList = detail.signals as { source: string; text: string; url?: string | null }[] | undefined;
+    const actionLabel = resAction === 'merged' ? 'Fusionado con tema existente' : resAction === 'updated' ? 'Tema actualizado' : 'Tema creado';
+    return (
+      <div className="space-y-1">
+        <p className="text-sm text-gray-700">{actionLabel}</p>
+        {typeof detail.description === 'string' && <p className="text-xs text-gray-500">Consulta: {detail.description}</p>}
+        {signalsList && signalsList.length > 0 && (
+          <CollapsibleList label={`${signalsList.length} señales encontradas`}>
+            <div className="space-y-0.5">
+              {signalsList.map((s, i) => (
+                <p key={i} className="text-[11px] text-gray-600">
+                  <span className="text-gray-400">[{s.source}]</span>{' '}
+                  {s.url ? (
+                    <a href={s.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-blue-600 hover:underline">{s.text}</a>
+                  ) : s.text}
+                </p>
+              ))}
+            </div>
+          </CollapsibleList>
+        )}
+      </div>
+    );
+  }
+
+  if (action === 'resolution_flagged' || action === 'resolution_emergency' || action === 'resolution_unclear') {
+    const suggestedOutcome = detail.suggestedOutcome as string | undefined;
+    const confidence = detail.confidence as string | undefined;
+    const evidence = (detail as Record<string, unknown>).evidence as string | undefined;
+    return (
+      <div className="space-y-1">
+        {suggestedOutcome && <p className="text-sm text-gray-700">Resultado sugerido: <strong>{suggestedOutcome}</strong></p>}
+        {confidence && (
+          <span className={`inline-block px-2 py-0.5 text-[10px] font-medium rounded-full ${
+            confidence === 'high' ? 'bg-green-100 text-green-700' :
+            confidence === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+            'bg-gray-100 text-gray-500'
+          }`}>
+            {confidence === 'high' ? 'Alta confianza' : confidence === 'medium' ? 'Confianza media' : 'Baja confianza'}
+          </span>
+        )}
+        {typeof detail.isEmergency === 'boolean' && detail.isEmergency && typeof detail.emergencyReason === 'string' && (
+          <p className="text-sm text-red-600">{detail.emergencyReason}</p>
+        )}
+      </div>
+    );
+  }
+
+  if (action === 'resolution_confirmed') {
+    const outcome = detail.outcome as string | undefined;
+    const confidence = detail.confidence as string | undefined;
+    return (
+      <div className="space-y-1">
+        {outcome && <p className="text-sm text-gray-700">Resultado: <strong>{outcome}</strong></p>}
+        {confidence && <p className="text-xs text-gray-500">Confianza: {confidence}</p>}
+        {typeof detail.evidence === 'string' && <p className="text-xs text-gray-500">{detail.evidence}</p>}
+      </div>
+    );
+  }
+
+  if (action === 'resolution_dismissed') {
+    const suggestedOutcome = detail.suggestedOutcome as string | undefined;
+    const confidence = detail.confidence as string | undefined;
+    return (
+      <div className="space-y-1">
+        {suggestedOutcome && <p className="text-sm text-gray-700">Se descartó: <strong>{suggestedOutcome}</strong> ({confidence ?? '?'})</p>}
+        {typeof detail.evidence === 'string' && <p className="text-xs text-gray-500">{detail.evidence}</p>}
       </div>
     );
   }
@@ -282,6 +379,23 @@ function getPreviewText(action: string, detail: Record<string, unknown>): string
   if (action === 'market_rejected' && detail.reason) {
     const reason = detail.reason as string;
     return reason.length > 80 ? reason.slice(0, 80) + '…' : reason;
+  }
+  if (action === 'resolution_flagged' || action === 'resolution_emergency' || action === 'resolution_unclear') {
+    const outcome = detail.suggestedOutcome as string | undefined;
+    const confidence = detail.confidence as string | undefined;
+    if (outcome) return `${outcome} (${confidence ?? '?'})`;
+    return null;
+  }
+  if (action === 'resolution_confirmed') {
+    return `Confirmado: ${detail.outcome ?? '?'}`;
+  }
+  if (action === 'resolution_dismissed') {
+    return `Descartado: ${detail.suggestedOutcome ?? '?'}`;
+  }
+  if (action === 'topic_research_completed') {
+    const resAction = detail.action as string | undefined;
+    const label = resAction === 'merged' ? 'Fusionado' : resAction === 'updated' ? 'Actualizado' : 'Creado';
+    return `${label} · ${detail.signalCount ?? 0} señales`;
   }
   if (action === 'ingestion_completed') {
     return `${detail.signalsCount ?? 0} señales · ${detail.topicCount ?? 0} temas`;

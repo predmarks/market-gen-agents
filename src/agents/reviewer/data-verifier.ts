@@ -83,6 +83,7 @@ Today's date: ${new Date().toISOString().split('T')[0]}`;
     userMessage,
     outputSchema: OUTPUT_SCHEMA,
     model: 'opus',
+    operation: 'data_verify',
   });
 
   return result;

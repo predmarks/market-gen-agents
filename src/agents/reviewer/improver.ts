@@ -116,6 +116,7 @@ Devolvé el mercado COMPLETO con todas las mejoras aplicadas.`;
     outputSchema: OUTPUT_SCHEMA,
     outputToolName: 'improve_market',
     model: 'opus',
+    operation: 'improve_market',
   });
 
   return result;

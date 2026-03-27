@@ -94,6 +94,7 @@ REGLAS CRÍTICAS para contingencias:
       system,
       userMessage: `Completá los campos faltantes: ${missing.join(', ')}`,
       outputSchema: buildOutputSchema(missing),
+      operation: 'expand_market',
     });
 
     // Merge: user-provided fields take precedence

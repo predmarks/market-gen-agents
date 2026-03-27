@@ -1,6 +1,6 @@
 import { inngest } from './client';
 import { db } from '@/db/client';
-import { sourcingRuns, topics as topicsTable, topicSignals } from '@/db/schema';
+import { sourcingRuns, topics as topicsTable, topicSignals, markets } from '@/db/schema';
 import { eq, sql, inArray } from 'drizzle-orm';
 import { ingestAllSources, markSignalsUsed } from '@/agents/sourcer/ingestion';
 import { updateTopics, markStaleTopics } from '@/agents/sourcer/topic-extractor';
@@ -292,16 +292,52 @@ export const ingestionJob = inngest.createFunction(
       for (const s of ingestionResult.signals) {
         signalsBySource[s.source] = (signalsBySource[s.source] ?? 0) + 1;
       }
+      // Fetch topic details for the log
+      const freshTopicDetails = freshTopicIds.length > 0
+        ? await db
+            .select({ id: topicsTable.id, name: topicsTable.name, slug: topicsTable.slug })
+            .from(topicsTable)
+            .where(inArray(topicsTable.id, freshTopicIds))
+        : [];
+
       await logActivity('ingestion_completed', {
         entityType: 'system',
         detail: {
           signalsCount: ingestionResult.signals.length,
           topicCount: freshTopicIds.length,
           signalsBySource,
-          signals: ingestionResult.signals.map((s) => ({ source: s.source, text: s.text.slice(0, 150) })),
+          signals: ingestionResult.signals.map((s) => ({ source: s.source, text: s.text.slice(0, 150), url: s.url ?? null })),
+          topics: freshTopicDetails.map((t) => ({ id: t.id, name: t.name, slug: t.slug })),
         },
         source: 'pipeline',
       });
+      // Check if any open markets are linked to fresh topics → trigger resolution checks
+      if (freshTopicIds.length > 0) {
+        await step.run('dispatch-resolution-checks', async () => {
+          const openMarkets = await db
+            .select({ id: markets.id, sourceContext: markets.sourceContext })
+            .from(markets)
+            .where(eq(markets.status, 'open'));
+
+          const topicSet = new Set(freshTopicIds);
+          const matched = openMarkets.filter((m) => {
+            const ctx = m.sourceContext as { topicIds?: string[] } | null;
+            return ctx?.topicIds?.some((tid) => topicSet.has(tid));
+          });
+
+          if (matched.length > 0) {
+            await inngest.send(
+              matched.map((m) => ({
+                name: 'markets/resolution.check' as const,
+                data: { id: m.id },
+              })),
+            );
+          }
+
+          return { dispatched: matched.length };
+        });
+      }
+
       return { status: 'complete', runId, topicIds: freshTopicIds };
     } catch (err) {
       // Mark run as failed

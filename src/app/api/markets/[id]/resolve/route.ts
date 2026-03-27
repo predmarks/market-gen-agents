@@ -3,6 +3,7 @@ import { db } from '@/db/client';
 import { markets } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import type { Resolution } from '@/db/types';
+import { logActivity } from '@/lib/activity-log';
 
 export async function POST(
   request: NextRequest,
@@ -56,6 +57,19 @@ export async function POST(
     })
     .where(eq(markets.id, id))
     .returning();
+
+  await logActivity('resolution_confirmed', {
+    entityType: 'market',
+    entityId: id,
+    entityLabel: market.title,
+    detail: {
+      outcome,
+      confidence: resolution.confidence,
+      evidence: resolution.evidence,
+      confirmedBy: resolution.confirmedBy,
+    },
+    source: 'ui',
+  });
 
   return NextResponse.json(updated);
 }

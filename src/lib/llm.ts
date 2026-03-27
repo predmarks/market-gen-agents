@@ -1,4 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { db } from '@/db/client';
+import { llmUsage } from '@/db/schema';
 
 const client = new Anthropic({ maxRetries: 2 });
 
@@ -15,6 +17,7 @@ interface CallClaudeOptions {
   outputToolName?: string;
   maxTokens?: number;
   model?: 'opus' | 'sonnet';
+  operation?: string;
 }
 
 interface CallClaudeResult<T> {
@@ -22,14 +25,24 @@ interface CallClaudeResult<T> {
   usage: { inputTokens: number; outputTokens: number };
 }
 
+function logUsage(operation: string, model: string, inputTokens: number, outputTokens: number) {
+  db.insert(llmUsage)
+    .values({ operation, model, inputTokens, outputTokens })
+    .execute()
+    .catch(() => { /* fire-and-forget */ });
+}
+
+export { client };
+
 export async function callClaude<T>(
   options: CallClaudeOptions,
 ): Promise<CallClaudeResult<T>> {
   const toolName = options.outputToolName ?? 'output';
+  const model = MODELS[options.model ?? 'sonnet'];
 
   const response = await client.messages
     .stream({
-      model: MODELS[options.model ?? 'sonnet'],
+      model,
       max_tokens: options.maxTokens ?? MAX_TOKENS,
       system: options.system,
       tools: [
@@ -53,23 +66,27 @@ export async function callClaude<T>(
     throw new Error(`Claude did not return a ${toolName} tool_use block`);
   }
 
-  return {
-    result: toolBlock.input as T,
-    usage: {
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-    },
+  const usage = {
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
   };
+
+  if (options.operation) {
+    logUsage(options.operation, model, usage.inputTokens, usage.outputTokens);
+  }
+
+  return { result: toolBlock.input as T, usage };
 }
 
 export async function callClaudeWithSearch<T>(
   options: CallClaudeOptions,
 ): Promise<CallClaudeResult<T>> {
   const toolName = options.outputToolName ?? 'output';
+  const model = MODELS[options.model ?? 'sonnet'];
 
   const response = await client.messages
     .stream({
-      model: MODELS[options.model ?? 'sonnet'],
+      model,
       max_tokens: options.maxTokens ?? MAX_TOKENS,
       system: options.system,
       tools: [
@@ -94,11 +111,16 @@ export async function callClaudeWithSearch<T>(
     throw new Error(`Claude did not return a ${toolName} tool_use block`);
   }
 
-  return {
-    result: toolBlock.input as T,
-    usage: {
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-    },
+  const usage = {
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
   };
+
+  if (options.operation) {
+    logUsage(options.operation, model, usage.inputTokens, usage.outputTokens);
+  }
+
+  return { result: toolBlock.input as T, usage };
 }
+
+export { logUsage };

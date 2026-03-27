@@ -14,6 +14,7 @@ import { MarketActions } from './_components/MarketActions';
 import { CopyJsonButton } from './_components/CopyJsonButton';
 import { Markdown } from '../../../_components/Markdown';
 import { ActivityCard } from '@/app/_components/ActivityCard';
+import { ResolutionConfirmButton, ResolutionDismissButton } from './_components/ResolutionActions';
 
 function formatTimestamp(ts: number): string {
   return new Intl.DateTimeFormat('es-AR', {
@@ -103,6 +104,95 @@ export default async function MarketDetailPage({ params }: Props) {
       </div>
 
       <div className="max-w-3xl">
+
+      {/* Resolution Suggestion — top of page */}
+      {resolution && !market.outcome && (
+        <div className={`mb-6 rounded-lg border p-6 ${
+          market.status === 'open' && resolution.suggestedOutcome
+            ? 'bg-amber-50 border-amber-300'
+            : 'bg-white border-gray-200'
+        }`}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold">Resolución sugerida</h2>
+            <div className="flex items-center gap-2">
+              {resolution.flaggedAt && (
+                <span className="text-[10px] text-gray-400">
+                  {new Intl.DateTimeFormat('es-AR', {
+                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                    timeZone: 'America/Argentina/Buenos_Aires',
+                  }).format(new Date(resolution.flaggedAt))}
+                </span>
+              )}
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                resolution.confidence === 'high' ? 'bg-green-100 text-green-700' :
+                resolution.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-gray-100 text-gray-500'
+              }`}>
+                {resolution.confidence === 'high' ? 'Alta confianza' :
+                 resolution.confidence === 'medium' ? 'Confianza media' : 'Baja confianza'}
+              </span>
+            </div>
+          </div>
+
+          {market.status === 'open' && resolution.suggestedOutcome && (
+            <div className="bg-amber-100 border border-amber-200 rounded-md px-3 py-2 mb-3 text-sm text-amber-800">
+              El mercado sigue abierto y hay evidencia de resolución.
+            </div>
+          )}
+
+          {resolution.suggestedOutcome && (
+            <div className="mb-3">
+              <span className="text-sm text-gray-500">Resultado:</span>{' '}
+              <span className="text-lg font-bold">{resolution.suggestedOutcome}</span>
+            </div>
+          )}
+
+          <p className="text-sm text-gray-700 mb-3">{resolution.evidence}</p>
+
+          {resolution.evidenceUrls && resolution.evidenceUrls.length > 0 && (
+            <div className="mb-3">
+              <a href={resolution.evidenceUrls[0]} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
+                Fuente principal
+              </a>
+              {resolution.evidenceUrls.length > 1 && (
+                <div className="mt-1 space-y-0.5">
+                  {resolution.evidenceUrls.slice(1).map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-gray-400 hover:text-blue-600 hover:underline truncate">
+                      {url}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {resolution.suggestedOutcome && !resolution.confirmedAt && (
+            <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
+              <ResolutionConfirmButton marketId={market.id} outcome={resolution.suggestedOutcome} />
+              <ResolutionDismissButton marketId={market.id} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Resolution (confirmed) */}
+      {resolution && market.outcome && (
+        <div className="mb-6 bg-green-50 rounded-lg border border-green-200 p-6">
+          <div className="flex items-center gap-3">
+            <span className="text-lg font-bold">Resuelto: {market.outcome}</span>
+            {resolution.confirmedAt && (
+              <span className="text-xs text-gray-400">
+                {new Intl.DateTimeFormat('es-AR', {
+                  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                  timeZone: 'America/Argentina/Buenos_Aires',
+                }).format(new Date(resolution.confirmedAt))}
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-gray-700 mt-1">{resolution.evidence}</p>
+        </div>
+      )}
+
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
           <h1 className="text-xl font-bold">{market.title}</h1>
@@ -193,20 +283,21 @@ export default async function MarketDetailPage({ params }: Props) {
       </div>
 
       {/* Deployable JSON Preview */}
-      <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-3">
+      <details className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
+        <summary className="flex items-center justify-between cursor-pointer list-none">
           <h2 className="text-lg font-bold">JSON</h2>
           <CopyJsonButton json={JSON.stringify(deployable, null, 2)} />
-        </div>
-        <pre className="bg-gray-50 rounded-lg p-4 text-sm overflow-x-auto">
+        </summary>
+        <pre className="bg-gray-50 rounded-lg p-4 text-sm overflow-x-auto mt-3">
           {JSON.stringify(deployable, null, 2)}
         </pre>
-      </div>
+      </details>
 
       {/* Iteration History */}
       {iterations.length > 0 && (
-        <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-bold mb-4">Historial de iteraciones</h2>
+        <details className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
+          <summary className="text-lg font-bold cursor-pointer list-none">Historial de iteraciones</summary>
+          <div className="mt-4"></div>
           <div className="space-y-4">
             {iterations.map((iter) => (
               <details key={iter.version} className="border border-gray-100 rounded-lg">
@@ -249,13 +340,14 @@ export default async function MarketDetailPage({ params }: Props) {
               </details>
             ))}
           </div>
-        </div>
+        </details>
       )}
 
       {/* Activity Timeline */}
       {(events.length > 0 || activity.length > 0) && (
-        <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-bold mb-4">Actividad</h2>
+        <details className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
+          <summary className="text-lg font-bold cursor-pointer list-none">Actividad</summary>
+          <div className="mt-4"></div>
           {events.length > 0 && (
             <ul className="border-l-2 border-gray-200 ml-2 space-y-0">
               {events.map((event) => (
@@ -282,13 +374,14 @@ export default async function MarketDetailPage({ params }: Props) {
               ))}
             </div>
           )}
-        </div>
+        </details>
       )}
 
       {/* Review Section */}
       {review && (
-        <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-bold mb-4">Revisión final</h2>
+        <details className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
+          <summary className="text-lg font-bold cursor-pointer list-none">Revisión final</summary>
+          <div className="mt-4"></div>
 
           {/* Scores */}
           {review.scores.overallScore > 0 && (
@@ -381,29 +474,15 @@ export default async function MarketDetailPage({ params }: Props) {
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {/* Resolution Section */}
-      {resolution && (
-        <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-bold mb-3">Resolución</h2>
-          <div className="space-y-1 text-sm">
-            <div>
-              Resultado sugerido: <strong>{resolution.suggestedOutcome}</strong>
-            </div>
-            <div>Confianza: {resolution.confidence}</div>
-            <div className="text-gray-700">{resolution.evidence}</div>
-          </div>
-        </div>
+        </details>
       )}
 
       {/* Related Signals */}
       {relatedSignals.length > 0 && (
-        <div className="mt-6 bg-white rounded-lg border border-gray-200">
-          <div className="px-5 py-3 border-b border-gray-100">
+        <details className="mt-6 bg-white rounded-lg border border-gray-200">
+          <summary className="px-5 py-3 border-b border-gray-100 cursor-pointer list-none">
             <h2 className="text-lg font-bold">Señales relacionadas ({relatedSignals.length})</h2>
-          </div>
+          </summary>
           <div className="divide-y divide-gray-50">
             {relatedSignals.map((s) => {
               const badge = { news: { label: 'Noticia', cls: 'bg-blue-100 text-blue-700' }, data: { label: 'Dato', cls: 'bg-amber-100 text-amber-700' }, social: { label: 'Social', cls: 'bg-purple-100 text-purple-700' }, event: { label: 'Evento', cls: 'bg-green-100 text-green-700' } }[s.type] ?? { label: s.type, cls: 'bg-gray-100 text-gray-600' };
@@ -426,7 +505,7 @@ export default async function MarketDetailPage({ params }: Props) {
               );
             })}
           </div>
-        </div>
+        </details>
       )}
 
       </div>
@@ -530,16 +609,21 @@ const SECTION_COLORS: Record<string, string> = {
 function Section({
   title,
   children,
+  defaultOpen = true,
 }: {
   title: string;
   children: React.ReactNode;
+  defaultOpen?: boolean;
 }) {
   const borderColor = SECTION_COLORS[title] ?? 'border-gray-300';
   return (
-    <div className={`border-l-3 ${borderColor} pl-3`}>
-      <h3 className="text-base font-semibold text-gray-700 mb-1">{title}</h3>
+    <details open={defaultOpen} className={`border-l-3 ${borderColor} pl-3 group`}>
+      <summary className="text-base font-semibold text-gray-700 mb-1 cursor-pointer list-none flex items-center gap-1">
+        <span className="text-[10px] text-gray-400 group-open:rotate-90 transition-transform">&#9654;</span>
+        {title}
+      </summary>
       <div className="text-sm">{children}</div>
-    </div>
+    </details>
   );
 }
 

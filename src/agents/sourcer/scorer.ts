@@ -79,6 +79,7 @@ ${feedbackLines}
 Re-evaluá el score considerando este feedback.`,
     outputSchema: RESCORE_SCHEMA,
     outputToolName: 'rescore_topic',
+    operation: 'rescore_topic',
   });
 
   return result;
@@ -102,6 +103,7 @@ export async function scoreSignals(signals: SourceSignal[]): Promise<SourceSigna
     userMessage: `HOY: ${today}\n\nSEÑALES A EVALUAR:\n${signalList}`,
     outputSchema: OUTPUT_SCHEMA,
     outputToolName: 'score_signals',
+    operation: 'score_signals',
   });
 
   // Apply scores to signals

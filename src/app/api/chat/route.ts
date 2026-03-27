@@ -8,6 +8,7 @@ import { loadRules } from '@/config/rules';
 import { slugify } from '@/agents/sourcer/types';
 import { inngest } from '@/inngest/client';
 import { logActivity } from '@/lib/activity-log';
+import { logUsage } from '@/lib/llm';
 import { loadGenerationPrompt, saveGenerationPrompt } from '@/agents/sourcer/generator';
 
 const client = new Anthropic({ maxRetries: 2 });
@@ -358,6 +359,17 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'check_resolution',
+    description: 'Trigger resolution check for an open market — searches for evidence that the resolution event occurred. Runs in background.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        marketId: { type: 'string' as const },
+      },
+      required: ['marketId'],
+    },
+  },
+  {
     name: 'rescore_topic',
     description: 'Re-evaluate a topic\'s score based on its current state and feedback',
     input_schema: {
@@ -669,6 +681,16 @@ async function executeTool(block: Anthropic.ToolUseBlock, contextType: ContextTy
     return `Revisión del mercado ${marketId} iniciada.`;
   }
 
+  if (block.name === 'check_resolution') {
+    const { marketId } = block.input as { marketId: string };
+    await inngest.send({
+      name: 'markets/resolution.check',
+      data: { id: marketId },
+    });
+    await logActivity('resolution_check_started', { entityType: 'market', entityId: marketId, source: 'chat' });
+    return `Verificación de resolución iniciada para mercado ${marketId}.`;
+  }
+
   if (block.name === 'rescore_topic') {
     const { topicId } = block.input as { topicId: string };
     const [topic] = await db.select().from(topics).where(eq(topics.id, topicId));
@@ -810,6 +832,8 @@ export async function POST(request: NextRequest) {
       tools: TOOLS,
       messages: apiMessages,
     });
+
+    logUsage('chat', 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens);
 
     const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
 

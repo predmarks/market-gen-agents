@@ -37,9 +37,7 @@ export default function TopicsPage() {
   const [dismissPromptId, setDismissPromptId] = useState<string | null>(null);
   const [dismissReason, setDismissReason] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [generating, setGenerating] = useState(false);
-  const [generatingSingle, setGeneratingSingle] = useState<string | null>(null);
-  const [count, setCount] = useState(10);
+  const [bulkLoading, setBulkLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchTopics = useCallback(async () => {
@@ -129,36 +127,38 @@ export default function TopicsPage() {
     }
   }
 
-  async function handleGenerateBulk() {
+  async function handleBulkDismiss() {
     if (selectedIds.size === 0) return;
-    setGenerating(true);
+    setBulkLoading(true);
     try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topicIds: Array.from(selectedIds), count }),
-      });
-      if (!res.ok) throw new Error('Failed');
+      const ids = Array.from(selectedIds);
+      await Promise.all(
+        ids.map((id) =>
+          fetch(`/api/topics/${id}/dismiss`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: 'Descartado en lote' }),
+          })
+        )
+      );
+      setTopics((prev) => prev.filter((t) => !selectedIds.has(t.id)));
+      setSelectedIds(new Set());
     } catch {
       // ignore
     } finally {
-      setGenerating(false);
+      setBulkLoading(false);
     }
   }
 
-  async function handleGenerateSingle(topicId: string) {
-    setGeneratingSingle(topicId);
+  async function handleBulkIngest() {
+    setBulkLoading(true);
     try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topicIds: [topicId], count: 1 }),
-      });
-      if (!res.ok) throw new Error('Failed');
+      await fetch('/api/sourcing', { method: 'POST' });
+      setSelectedIds(new Set());
     } catch {
       // ignore
     } finally {
-      setGeneratingSingle(null);
+      setBulkLoading(false);
     }
   }
 
@@ -200,7 +200,6 @@ export default function TopicsPage() {
     return acc;
   }, {});
 
-  const isGenerating = generating || generatingSingle !== null;
   const allSelected = selectableTopics.length > 0 && selectedIds.size === selectableTopics.length;
 
   return (
@@ -280,23 +279,19 @@ export default function TopicsPage() {
             {selectedIds.size} tema{selectedIds.size !== 1 ? 's' : ''} seleccionado{selectedIds.size !== 1 ? 's' : ''}
           </span>
           <div className="flex items-center gap-2 ml-auto">
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={count}
-              onChange={(e) => setCount(Math.min(50, Math.max(1, Number(e.target.value) || 1)))}
-              disabled={isGenerating}
-              className="w-16 px-2 py-1.5 text-sm border border-blue-300 rounded-md text-center disabled:opacity-50"
-            />
             <button
-              onClick={handleGenerateBulk}
-              disabled={isGenerating}
-              className="px-4 py-1.5 text-sm font-medium rounded-md bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition-colors"
+              onClick={handleBulkIngest}
+              disabled={bulkLoading}
+              className="px-4 py-1.5 text-sm font-medium rounded-md bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition-colors cursor-pointer"
             >
-              {generating
-                ? 'Generando...'
-                : `Generar ${count} mercado${count !== 1 ? 's' : ''} desde ${selectedIds.size} tema${selectedIds.size !== 1 ? 's' : ''}`}
+              {bulkLoading ? '...' : 'Buscar señales'}
+            </button>
+            <button
+              onClick={handleBulkDismiss}
+              disabled={bulkLoading}
+              className="px-4 py-1.5 text-sm font-medium rounded-md bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {bulkLoading ? '...' : 'Descartar seleccionados'}
             </button>
           </div>
         </div>
@@ -374,12 +369,12 @@ export default function TopicsPage() {
                 >
                   {isResearching ? 'investigando...' : isRegular ? 'recurrente' : isStale ? 'inactivo' : 'activo'}
                 </span>
+                <span className={`text-sm truncate ${isResearching ? 'text-gray-500' : 'font-medium text-gray-800'}`}>{t.name}</span>
                 {hasNewInfo && !isResearching && (
                   <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 shrink-0">
                     nueva info
                   </span>
                 )}
-                <span className={`text-sm truncate ${isResearching ? 'text-gray-500' : 'font-medium text-gray-800'}`}>{t.name}</span>
                 {!isResearching && (
                   <>
                     <span className="text-xs text-gray-400 shrink-0">{t.category}</span>
@@ -398,14 +393,6 @@ export default function TopicsPage() {
                 <div className="ml-auto flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                   {!isResearching && (
                     <>
-                      <button
-                        onClick={() => handleGenerateSingle(t.id)}
-                        disabled={isGenerating}
-                        className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50 cursor-pointer"
-                        title="Generar 1 mercado desde este tema"
-                      >
-                        {generatingSingle === t.id ? '...' : 'generar'}
-                      </button>
                       <button
                         onClick={() => openDismissPrompt(t.id)}
                         disabled={dismissing === t.id}

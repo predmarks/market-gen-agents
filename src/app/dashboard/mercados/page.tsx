@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface MarketEntry {
   id: string;
@@ -43,17 +43,21 @@ function ScoreBadge({ score }: { score: number }) {
       ? 'bg-yellow-100 text-yellow-700'
       : 'bg-gray-100 text-gray-500';
   return (
-    <span className={`px-1 py-0.5 rounded text-[10px] font-mono shrink-0 ${color}`}>
+    <span className={`px-1.5 py-0.5 rounded text-xs font-mono shrink-0 ${color}`}>
       {score.toFixed(1)}
     </span>
   );
 }
 
 export default function MercadosPage() {
+  const router = useRouter();
   const [markets, setMarkets] = useState<MarketEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'score' | 'date'>('score');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -85,9 +89,37 @@ export default function MercadosPage() {
 
   // Apply filter
   const activeFilter = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
-  const filtered = activeFilter.statuses
+  const baseFiltered = activeFilter.statuses
     ? markets.filter((m) => activeFilter.statuses!.includes(m.status))
     : markets.filter((m) => !ARCHIVED_STATUSES.includes(m.status));
+
+  // Sort
+  const filtered = [...baseFiltered].sort((a, b) => {
+    if (sortBy === 'score') return (b.score ?? 0) - (a.score ?? 0);
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  // Selection — only proposals are selectable (have approve/reject actions)
+  const selectableMarkets = filtered.filter((m) => m.status === 'proposal');
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === selectableMarkets.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(selectableMarkets.map((m) => m.id)));
+    }
+  }
+
+  const allSelected = selectableMarkets.length > 0 && selectedIds.size === selectableMarkets.length;
 
   async function handleApprove(id: string) {
     setActionLoading(id);
@@ -109,9 +141,38 @@ export default function MercadosPage() {
     }
   }
 
+  async function handleBulkAction(action: 'approve' | 'reject') {
+    setBulkLoading(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await Promise.all(
+        ids.map((id) =>
+          fetch(`/api/markets/${id}/${action}`, { method: 'POST' })
+        )
+      );
+      setSelectedIds(new Set());
+      fetchAll();
+    } catch { /* ignore */ } finally {
+      setBulkLoading(false);
+    }
+  }
+
   return (
-    <div className="space-y-4 p-6 max-w-4xl">
-      <h1 className="text-2xl font-bold">Mercados</h1>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Mercados</h1>
+        {selectableMarkets.length > 0 && (
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              className="rounded border-gray-300"
+            />
+            Seleccionar todos
+          </label>
+        )}
+      </div>
 
       {/* Status filters */}
       {markets.length > 0 && (
@@ -136,55 +197,121 @@ export default function MercadosPage() {
         </div>
       )}
 
+      {/* Sort controls */}
+      {markets.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400">Ordenar:</span>
+          {([['score', 'Score'], ['date', 'Recientes']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setSortBy(key)}
+              className={`px-2 py-0.5 text-xs rounded border transition-colors cursor-pointer ${
+                sortBy === key
+                  ? 'bg-gray-800 text-white border-gray-800'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+          <span className="text-sm text-blue-700 font-medium">
+            {selectedIds.size} mercado{selectedIds.size !== 1 ? 's' : ''} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+          </span>
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={() => handleBulkAction('approve')}
+              disabled={bulkLoading}
+              className="px-4 py-1.5 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {bulkLoading ? '...' : 'Aprobar seleccionados'}
+            </button>
+            <button
+              onClick={() => handleBulkAction('reject')}
+              disabled={bulkLoading}
+              className="px-4 py-1.5 text-sm font-medium rounded-md bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {bulkLoading ? '...' : 'Rechazar seleccionados'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading && <div className="text-sm text-gray-500">Cargando...</div>}
 
       {!loading && markets.length === 0 && (
         <div className="text-sm text-gray-500">No hay mercados</div>
       )}
 
-      {filtered.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-50">
-          {filtered.map((m) => {
-            const badge = STATUS_BADGE[m.status] ?? STATUS_BADGE.candidate;
-            return (
-              <div key={m.id} className="flex items-center gap-2 px-3 py-2 text-sm">
-                <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${badge.className}`}>
+      <div className="grid gap-1">
+        {filtered.map((m) => {
+          const badge = STATUS_BADGE[m.status] ?? STATUS_BADGE.candidate;
+          const isProposal = m.status === 'proposal';
+          const isSelected = selectedIds.has(m.id);
+
+          return (
+            <div
+              key={m.id}
+              onClick={() => router.push(`/dashboard/markets/${m.id}`)}
+              className={`bg-white border rounded-lg cursor-pointer hover:border-gray-400 transition-colors ${
+                isSelected
+                  ? 'border-blue-400 ring-1 ring-blue-200'
+                  : 'border-gray-200'
+              }`}
+            >
+              <div className="flex items-center gap-2 px-3 py-2">
+                {isProposal ? (
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleSelect(m.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded border-gray-300 shrink-0"
+                  />
+                ) : (
+                  <span className="w-4 shrink-0" />
+                )}
+                <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${badge.className}`}>
                   {badge.label}
                 </span>
                 {m.score != null && <ScoreBadge score={m.score} />}
-                <Link
-                  href={`/dashboard/markets/${m.id}`}
-                  className="text-gray-800 hover:text-blue-600 truncate flex-1 min-w-0"
-                >
+                <span className="text-sm font-medium text-gray-800 truncate flex-1 min-w-0">
                   {m.title}
-                </Link>
-                <span className="text-[10px] text-gray-400 shrink-0">{m.category}</span>
+                </span>
+                <span className="text-xs text-gray-400 shrink-0">{m.category}</span>
                 {m.stale && (
                   <span className="text-[10px] text-orange-500 shrink-0">stale</span>
                 )}
-                {m.status === 'proposal' && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => handleApprove(m.id)}
-                      disabled={actionLoading === m.id}
-                      className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-green-100 hover:bg-green-200 text-green-700 disabled:opacity-50 transition-colors cursor-pointer"
-                    >
-                      {actionLoading === m.id ? '...' : 'Aprobar'}
-                    </button>
-                    <button
-                      onClick={() => handleReject(m.id)}
-                      disabled={actionLoading === m.id}
-                      className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-100 hover:bg-red-200 text-red-700 disabled:opacity-50 transition-colors cursor-pointer"
-                    >
-                      {actionLoading === m.id ? '...' : 'Rechazar'}
-                    </button>
-                  </div>
-                )}
+                <div className="ml-auto flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {isProposal && (
+                    <>
+                      <button
+                        onClick={() => handleApprove(m.id)}
+                        disabled={actionLoading === m.id || bulkLoading}
+                        className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-green-100 hover:bg-green-200 text-green-700 disabled:opacity-50 transition-colors cursor-pointer"
+                      >
+                        {actionLoading === m.id ? '...' : 'Aprobar'}
+                      </button>
+                      <button
+                        onClick={() => handleReject(m.id)}
+                        disabled={actionLoading === m.id || bulkLoading}
+                        className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-100 hover:bg-red-200 text-red-700 disabled:opacity-50 transition-colors cursor-pointer"
+                      >
+                        {actionLoading === m.id ? '...' : 'Rechazar'}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-            );
-          })}
-        </div>
-      )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

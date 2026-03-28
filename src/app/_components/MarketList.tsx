@@ -74,7 +74,7 @@ export function MarketList({ markets }: { markets: MarketEntry[] }) {
     ? markets.filter((m) => m.title.toLowerCase().includes(query.toLowerCase()))
     : markets;
 
-  const live = filtered.filter((m) => LIVE_STATUSES.includes(m.status));
+  const live = filtered.filter((m) => LIVE_STATUSES.includes(m.status)).sort((a, b) => a.endTimestamp - b.endTimestamp);
   const inResolution = filtered.filter((m) => m.status === 'in_resolution');
 
   return (

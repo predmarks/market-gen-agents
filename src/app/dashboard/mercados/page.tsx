@@ -15,6 +15,7 @@ interface MarketEntry {
   participants: number | null;
   endTimestamp: number;
   resolution: { suggestedOutcome?: string; confidence?: string } | null;
+  outcome: string | null;
 }
 
 function formatTimeInfo(status: string, endTimestamp: number): string | null {
@@ -330,7 +331,11 @@ export default function MercadosPage() {
                 <span className="text-sm font-medium text-gray-800 truncate flex-1 min-w-0">
                   {m.title}
                 </span>
-                {m.resolution?.suggestedOutcome && (
+                {m.outcome ? (
+                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">
+                    ✓ {m.outcome}
+                  </span>
+                ) : m.resolution?.suggestedOutcome ? (
                   <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
                     m.resolution.confidence === 'high' ? 'bg-green-100 text-green-700' :
                     m.resolution.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700' :
@@ -338,7 +343,7 @@ export default function MercadosPage() {
                   }`}>
                     → {m.resolution.suggestedOutcome}
                   </span>
-                )}
+                ) : null}
                 <span className="text-xs text-gray-400 shrink-0">{m.category}</span>
                 {m.volume && (
                   <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-50 text-emerald-600">${formatVolume(m.volume)}</span>

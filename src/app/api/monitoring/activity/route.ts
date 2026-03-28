@@ -24,6 +24,7 @@ interface MarketMonitorEntry {
   participants: number | null;
   endTimestamp: number;
   resolution: { suggestedOutcome?: string; confidence?: string } | null;
+  outcome: string | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -135,6 +136,7 @@ export async function GET(request: NextRequest) {
       volume: m.volume,
       participants: m.participants,
       endTimestamp: m.endTimestamp,
+      outcome: m.outcome,
       resolution: resolution?.suggestedOutcome
         ? { suggestedOutcome: resolution.suggestedOutcome, confidence: resolution.confidence }
         : null,

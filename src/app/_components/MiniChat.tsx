@@ -9,6 +9,7 @@ import type { ActivityEntry } from './ActivityCard';
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  activityIds?: string[];
 }
 
 interface Conversation {
@@ -48,6 +49,31 @@ function formatTime(iso: string): string {
     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
     timeZone: 'America/Argentina/Buenos_Aires',
   }).format(new Date(iso));
+}
+
+function PersistedActivityCards({ activityIds }: { activityIds: string[] }) {
+  const [entries, setEntries] = useState<ActivityEntry[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/activity?ids=${activityIds.join(',')}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (!cancelled && data?.entries) setEntries(data.entries);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [activityIds]);
+
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="space-y-1.5 mx-1 p-2 bg-gray-50 rounded border border-gray-100 mt-1">
+      {entries.map((entry) => (
+        <ActivityCard key={entry.id} entry={entry} compact />
+      ))}
+    </div>
+  );
 }
 
 export function MiniChat() {
@@ -160,10 +186,13 @@ export function MiniChat() {
     return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
   }, []);
 
-  // Poll for background job completion (generation, review)
-  const COMPLETION_MAP: Record<string, string> = {
-    generation_started: 'generation_completed',
-    review_started: 'review_completed',
+  // Poll for background job completion
+  const COMPLETION_MAP: Record<string, string[]> = {
+    generation_started: ['generation_completed'],
+    review_started: ['review_completed'],
+    ingestion_started: ['ingestion_completed', 'ingestion_failed'],
+    resolution_check_started: ['resolution_flagged', 'resolution_unclear', 'resolution_emergency'],
+    topic_research_started: ['topic_research_completed'],
   };
 
   function startPollingForCompletion(entries: ActivityEntry[]) {
@@ -171,7 +200,7 @@ export function MiniChat() {
     if (backgroundActions.length === 0) return;
 
     const since = backgroundActions[0].createdAt;
-    const targetActions = backgroundActions.map((e) => COMPLETION_MAP[e.action]);
+    const targetActions = backgroundActions.flatMap((e) => COMPLETION_MAP[e.action]);
     let attempts = 0;
     const maxAttempts = 60; // 5 min at 5s intervals
 
@@ -208,12 +237,18 @@ export function MiniChat() {
     setActiveConvId(null);
     setMessages([]);
     setError(null);
+    setActivityEntries([]);
+    setPollingEntries([]);
+    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
   }
 
   function handleLoadConversation(conv: Conversation) {
     setActiveConvId(conv.id);
     setMessages(conv.messages);
     setError(null);
+    setActivityEntries([]);
+    setPollingEntries([]);
+    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
   }
 
   async function handleDeleteConversation(convId: string) {
@@ -385,20 +420,27 @@ export function MiniChat() {
           </div>
         )}
 
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`text-sm rounded px-3 py-2 ${
-              msg.role === 'user'
-                ? 'bg-blue-50 text-blue-900 ml-4'
-                : 'bg-gray-50 text-gray-700 mr-4 prose prose-sm max-w-none'
-            }`}
-          >
-            {msg.role === 'assistant' ? <ReactMarkdown>{msg.content}</ReactMarkdown> : msg.content}
-          </div>
-        ))}
+        {messages.map((msg, i) => {
+          const isLastAssistant = msg.role === 'assistant' && i === messages.length - 1;
+          return (
+            <div key={i}>
+              <div
+                className={`text-sm rounded px-3 py-2 ${
+                  msg.role === 'user'
+                    ? 'bg-blue-50 text-blue-900 ml-4'
+                    : 'bg-gray-50 text-gray-700 mr-4 prose prose-sm max-w-none'
+                }`}
+              >
+                {msg.role === 'assistant' ? <ReactMarkdown>{msg.content}</ReactMarkdown> : msg.content}
+              </div>
+              {msg.activityIds && msg.activityIds.length > 0 && !isLastAssistant && (
+                <PersistedActivityCards activityIds={msg.activityIds} />
+              )}
+            </div>
+          );
+        })}
 
-        {/* Activity cards from tool executions */}
+        {/* Activity cards from current tool executions (last message) */}
         {activityEntries.length > 0 && !loading && (
           <div className="space-y-1.5 mx-1 p-2 bg-gray-50 rounded border border-gray-100">
             {activityEntries.map((entry) => (

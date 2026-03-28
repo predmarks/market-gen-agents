@@ -300,8 +300,12 @@ export const ingestionJob = inngest.createFunction(
             .where(inArray(topicsTable.id, freshTopicIds))
         : [];
 
+      const topicNames = freshTopicDetails.map((t) => t.name);
       await logActivity('ingestion_completed', {
         entityType: 'system',
+        entityLabel: topicNames.length > 0
+          ? topicNames.slice(0, 5).join(', ') + (topicNames.length > 5 ? ` (+${topicNames.length - 5})` : '')
+          : `${ingestionResult.signals.length} señales`,
         detail: {
           signalsCount: ingestionResult.signals.length,
           topicCount: freshTopicIds.length,

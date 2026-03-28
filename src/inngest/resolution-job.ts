@@ -1,10 +1,48 @@
 import { inngest } from './client';
 import { db } from '@/db/client';
-import { markets, resolutionFeedback } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { markets, resolutionFeedback, signals as signalsTable } from '@/db/schema';
+import { eq, desc, isNotNull } from 'drizzle-orm';
 import { evaluateResolution } from '@/agents/resolver/evaluator';
 import { logActivity } from '@/lib/activity-log';
 import type { Resolution } from '@/db/types';
+
+function extractUrls(text: string): string[] {
+  const urlRegex = /https?:\/\/[^\s"'<>)}\]]+/g;
+  return [...new Set(text.match(urlRegex) ?? [])];
+}
+
+async function fetchSourceContent(url: string): Promise<{ url: string; text: string } | null> {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Predmarks Bot)' },
+      signal: AbortSignal.timeout(10_000),
+      redirect: 'follow',
+    });
+    if (!res.ok) return null;
+
+    const contentType = res.headers.get('content-type') ?? '';
+
+    if (contentType.includes('json')) {
+      const json = await res.json();
+      return { url, text: JSON.stringify(json, null, 2).slice(0, 3000) };
+    }
+
+    const html = await res.text();
+    // Strip HTML tags, collapse whitespace
+    const text = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 3000);
+
+    return { url, text };
+  } catch (err) {
+    console.warn(`[resolution-job] Failed to fetch source ${url}:`, err);
+    return null;
+  }
+}
 
 export const resolutionJob = inngest.createFunction(
   { id: 'resolution-check', retries: 2, concurrency: { limit: 3 } },
@@ -20,6 +58,41 @@ export const resolutionJob = inngest.createFunction(
     if (!market || !['open', 'in_resolution'].includes(market.status)) {
       return { status: 'skipped', reason: `status: ${market?.status ?? 'not found'}` };
     }
+
+    // Fetch resolution source content and save as signal
+    const sourceContent = await step.run('fetch-resolution-source', async () => {
+      const urls = extractUrls(`${market.resolutionSource} ${market.description}`);
+      if (urls.length === 0) return null;
+
+      for (const url of urls.slice(0, 3)) {
+        const content = await fetchSourceContent(url);
+        if (!content) continue;
+
+        // Save as signal for audit trail
+        try {
+          await db
+            .insert(signalsTable)
+            .values({
+              type: 'data',
+              text: `Fuente de resolución: ${market.title.slice(0, 100)}`,
+              summary: content.text.slice(0, 500),
+              url: content.url,
+              source: 'resolution_source',
+              publishedAt: new Date(),
+            })
+            .onConflictDoUpdate({
+              target: signalsTable.url,
+              targetWhere: isNotNull(signalsTable.url),
+              set: { summary: content.text.slice(0, 500), publishedAt: new Date() },
+            });
+        } catch {
+          // Signal persistence is best-effort
+        }
+
+        return content;
+      }
+      return null;
+    });
 
     const check = await step.run('evaluate', async () => {
       // Load market-specific feedback (graceful if table doesn't exist yet)
@@ -44,6 +117,7 @@ export const resolutionJob = inngest.createFunction(
         resolutionSource: market.resolutionSource,
         endTimestamp: market.endTimestamp,
         feedback: feedbackTexts,
+        sourceContent,
       });
     });
 

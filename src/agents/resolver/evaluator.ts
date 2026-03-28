@@ -21,6 +21,7 @@ interface MarketForResolution {
   resolutionSource: string;
   endTimestamp: number;
   feedback?: string[];
+  sourceContent?: { url: string; text: string } | null;
 }
 
 const DEFAULT_RESOLUTION_PROMPT = `Sos un evaluador de resolución para Predmarks, una plataforma argentina de mercados de predicción.
@@ -128,6 +129,7 @@ MERCADO:
 - Cierre del mercado: ${endDate.toISOString()} ${isPastDeadline ? '(YA PASÓ)' : ''}
 
 HOY: ${now.toISOString().split('T')[0]}
+${market.sourceContent ? `\nCONTENIDO DE LA FUENTE DE RESOLUCIÓN (pre-cargado de ${market.sourceContent.url}):\n${market.sourceContent.text}` : ''}
 ${feedbackContext.length > 0 ? `\nFEEDBACK DE RESOLUCIONES PREVIAS:\n${feedbackContext.map((f) => `- ${f}`).join('\n')}` : ''}
 
 INSTRUCCIONES:

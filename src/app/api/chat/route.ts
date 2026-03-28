@@ -11,6 +11,7 @@ import { logActivity } from '@/lib/activity-log';
 import { logUsage } from '@/lib/llm';
 import { loadGenerationPrompt, saveGenerationPrompt } from '@/agents/sourcer/generator';
 import { loadResolutionPrompt, saveResolutionPrompt } from '@/agents/resolver/evaluator';
+import { syncDeployedMarkets } from '@/lib/sync-deployed';
 
 const client = new Anthropic({ maxRetries: 2 });
 
@@ -34,6 +35,7 @@ export const maxDuration = 300; // 5 min timeout for multi-turn tool loops
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  activityIds?: string[];
 }
 
 type ContextType = 'topic' | 'market' | 'signal' | 'global';
@@ -329,6 +331,14 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: 'ingest_signals',
     description: 'Trigger signal ingestion from all sources (RSS, Twitter, economic data). Runs in background.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
+    name: 'sync_deployed',
+    description: 'Sync all deployed onchain markets — pulls latest data from the indexer and blockchain, updates descriptions, links topics.',
     input_schema: {
       type: 'object' as const,
       properties: {},
@@ -665,8 +675,14 @@ async function executeTool(block: Anthropic.ToolUseBlock, contextType: ContextTy
 
   if (block.name === 'ingest_signals') {
     await inngest.send({ name: 'signals/ingest.requested', data: {} });
-    await logActivity('ingestion_started', { entityType: 'system', source: 'chat' });
+    await logActivity('ingestion_started', { entityType: 'system', entityLabel: 'RSS, datos económicos, Twitter', source: 'chat' });
     return 'Ingesta de señales iniciada. Se actualizarán señales y temas cuando termine.';
+  }
+
+  if (block.name === 'sync_deployed') {
+    const result = await syncDeployedMarkets();
+    await logActivity('sync_deployed', { entityType: 'system', entityLabel: `${result.created} nuevos, ${result.updated} actualizados`, detail: result as unknown as Record<string, unknown>, source: 'chat' });
+    return `Sync completado: ${result.created} creados, ${result.updated} actualizados, ${result.expanded} expandidos, ${result.resolved} resueltos onchain, ${result.topicLinked} temas vinculados.`;
   }
 
   if (block.name === 'generate_markets') {
@@ -943,7 +959,19 @@ export async function POST(request: NextRequest) {
 
   console.log(`[chat] final reply length=${reply.length} preview="${reply.slice(0, 100)}"`);
   if (!reply) reply = 'No entendí, ¿podés reformular?';
-  const fullConversation: ChatMessage[] = [...messages, { role: 'assistant', content: reply }];
+
+  // Collect activity IDs created during this request (by source=chat, last 30 seconds)
+  try {
+    const recentActivity = await db.select({ id: activityLog.id }).from(activityLog)
+      .where(and(eq(activityLog.source, 'chat'), gt(activityLog.createdAt, new Date(Date.now() - 30_000))))
+      .orderBy(desc(activityLog.createdAt))
+      .limit(10);
+    activityIds.push(...recentActivity.map((r) => r.id));
+  } catch { /* ignore */ }
+
+  // Include activityIds in the assistant message for persistence
+  const assistantMessage: ChatMessage = { role: 'assistant', content: reply, ...(activityIds.length > 0 ? { activityIds } : {}) };
+  const fullConversation: ChatMessage[] = [...messages, assistantMessage];
 
   // Persist conversation
   const title = messages[0].content.slice(0, 80);
@@ -961,15 +989,6 @@ export async function POST(request: NextRequest) {
       .returning({ id: conversations.id });
     resultConvId = created.id;
   }
-
-  // Collect activity IDs created during this request (by source=chat, last 30 seconds)
-  try {
-    const recentActivity = await db.select({ id: activityLog.id }).from(activityLog)
-      .where(and(eq(activityLog.source, 'chat'), gt(activityLog.createdAt, new Date(Date.now() - 30_000))))
-      .orderBy(desc(activityLog.createdAt))
-      .limit(10);
-    activityIds.push(...recentActivity.map((r) => r.id));
-  } catch { /* ignore */ }
 
   // Check if the current topic was renamed (slug changed)
   if (contextType === 'topic' && contextId) {

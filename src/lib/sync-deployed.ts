@@ -1,7 +1,7 @@
 import { db } from '@/db/client';
 import { markets } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { fetchUnresolvedOnchainMarkets } from './indexer';
+import { fetchOnchainMarkets } from './indexer';
 import { expandMarket } from './expand-market';
 import { fetchOnchainMarketData } from './onchain';
 import { matchMarketsToTopics } from './match-market-topic';
@@ -13,25 +13,80 @@ function toDateString(ts: number): string {
   return new Date(ts * 1000).toISOString().split('T')[0];
 }
 
+function mapResolvedOutcome(resolvedTo: number, outcomes: string[]): string | null {
+  if (resolvedTo <= 0 || resolvedTo > outcomes.length) return null;
+  return outcomes[resolvedTo - 1]; // 1-indexed
+}
+
 export async function syncDeployedMarkets(): Promise<{
   created: number;
   updated: number;
   expanded: number;
+  resolved: number;
   topicLinked: number;
   topicResearchDispatched: number;
   resolutionTriggered: number;
 }> {
-  const onchainMarkets = await fetchUnresolvedOnchainMarkets();
+  const onchainMarkets = await fetchOnchainMarkets();
   const now = Math.floor(Date.now() / 1000);
   let created = 0;
   let updated = 0;
   let expanded = 0;
+  let resolved = 0;
   let topicLinked = 0;
   let topicResearchDispatched = 0;
   const closedMarketIds: string[] = [];
   const toExpand: { id: string; onchainId: string; title: string; category: string; endTimestamp: number }[] = [];
 
   for (const om of onchainMarkets) {
+    // If resolved onchain, handle separately
+    if (om.resolvedTo > 0) {
+      const [existing] = await db
+        .select({ id: markets.id, status: markets.status, outcomes: markets.outcomes })
+        .from(markets)
+        .where(eq(markets.onchainId, om.onchainId));
+
+      if (existing && existing.status !== 'closed') {
+        // Get outcomes from DB or fetch from contract
+        let outcomes = (existing.outcomes as string[]) ?? [];
+        if (outcomes.length === 0) {
+          try {
+            const onchainData = await fetchOnchainMarketData(Number(om.onchainId));
+            outcomes = onchainData.outcomes;
+          } catch { /* use empty */ }
+        }
+
+        const outcome = mapResolvedOutcome(om.resolvedTo, outcomes);
+        if (outcome) {
+          await db.update(markets).set({
+            status: 'closed',
+            outcome,
+            resolvedAt: new Date(),
+            volume: om.volume,
+            participants: om.participants,
+          }).where(eq(markets.id, existing.id));
+
+          logActivity('market_resolved_onchain', {
+            entityType: 'market',
+            entityId: existing.id,
+            entityLabel: om.name,
+            detail: { outcome, resolvedTo: om.resolvedTo },
+            source: 'pipeline',
+          }).catch(() => {});
+
+          resolved++;
+        }
+      } else if (existing) {
+        // Already closed — just update volume/participants
+        await db.update(markets).set({
+          volume: om.volume,
+          participants: om.participants,
+        }).where(eq(markets.id, existing.id));
+        updated++;
+      }
+      continue;
+    }
+
     const status = om.endTimestamp && now > om.endTimestamp ? 'in_resolution' : 'open';
     const expectedResolutionDate = toDateString(om.endTimestamp);
 
@@ -222,5 +277,5 @@ export async function syncDeployedMarkets(): Promise<{
     );
   }
 
-  return { created, updated, expanded, topicLinked, topicResearchDispatched, resolutionTriggered: closedMarketIds.length };
+  return { created, updated, expanded, resolved, topicLinked, topicResearchDispatched, resolutionTriggered: closedMarketIds.length };
 }

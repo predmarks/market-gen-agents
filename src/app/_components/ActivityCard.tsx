@@ -44,6 +44,7 @@ const ACTION_BADGE: Record<string, { label: string; className: string }> = {
   generation_started: { label: 'Generación iniciada', className: 'bg-amber-100 text-amber-700' },
   generation_completed: { label: 'Generación completada', className: 'bg-amber-100 text-amber-700' },
   review_started: { label: 'Revisión iniciada', className: 'bg-purple-100 text-purple-700' },
+  review_completed: { label: 'Revisión completada', className: 'bg-purple-100 text-purple-700' },
   generation_prompt_updated: { label: 'Prompt generación', className: 'bg-amber-100 text-amber-700' },
   chat_prompt_updated: { label: 'Prompt chat', className: 'bg-amber-100 text-amber-700' },
   // Resolution
@@ -396,10 +397,28 @@ function getPreviewText(action: string, detail: Record<string, unknown>): string
   if (action === 'topic_research_completed') {
     const resAction = detail.action as string | undefined;
     const label = resAction === 'merged' ? 'Fusionado' : resAction === 'updated' ? 'Actualizado' : 'Creado';
-    return `${label} · ${detail.signalCount ?? 0} señales`;
+    const desc = detail.description as string | undefined;
+    return desc
+      ? `${label} · ${desc.length > 60 ? desc.slice(0, 60) + '…' : desc}`
+      : `${label} · ${detail.signalCount ?? 0} señales`;
+  }
+  if (action === 'topic_research_started') {
+    const desc = detail.description as string | undefined;
+    return desc ? (desc.length > 80 ? desc.slice(0, 80) + '…' : desc) : null;
   }
   if (action === 'ingestion_completed') {
+    const topicsList = detail.topics as { name: string }[] | undefined;
+    if (topicsList && topicsList.length > 0) {
+      const names = topicsList.slice(0, 3).map((t) => t.name).join(', ');
+      return `${detail.signalsCount ?? 0} señales → ${names}${topicsList.length > 3 ? ` (+${topicsList.length - 3})` : ''}`;
+    }
     return `${detail.signalsCount ?? 0} señales · ${detail.topicCount ?? 0} temas`;
+  }
+  if (action === 'review_completed') {
+    const result = detail.result as string | undefined;
+    const label = result === 'opened' ? 'Aprobado' : result === 'rejected' ? 'Rechazado' : result ?? '?';
+    const score = detail.score as number | undefined;
+    return score != null ? `${label} · Score: ${score.toFixed(1)}` : label;
   }
   if (action === 'generation_completed' && detail.candidateCount != null) {
     return `${detail.candidateCount} mercados generados`;

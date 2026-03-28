@@ -45,7 +45,7 @@ async function fetchSourceContent(url: string): Promise<{ url: string; text: str
 }
 
 export const resolutionJob = inngest.createFunction(
-  { id: 'resolution-check', retries: 2, concurrency: { limit: 3 } },
+  { id: 'resolution-check', retries: 2, concurrency: [{ limit: 3 }, { limit: 1, key: 'event.data.id' }] },
   { event: 'markets/resolution.check' },
   async ({ event, step }) => {
     const marketId = event.data.id as string;
@@ -122,6 +122,20 @@ export const resolutionJob = inngest.createFunction(
     });
 
     if (check.status === 'unresolved') {
+      await step.run('log-unresolved', async () => {
+        await logActivity('resolution_check_unresolved', {
+          entityType: 'market',
+          entityId: marketId,
+          entityLabel: market.title,
+          detail: {
+            status: check.status,
+            confidence: check.confidence,
+            evidence: check.evidence,
+            evidenceUrls: check.evidenceUrls,
+          },
+          source: 'pipeline',
+        });
+      });
       return { status: 'unresolved', marketId };
     }
 
@@ -155,6 +169,8 @@ export const resolutionJob = inngest.createFunction(
           status: check.status,
           suggestedOutcome: check.suggestedOutcome,
           confidence: check.confidence,
+          evidence: check.evidence,
+          evidenceUrls: check.evidenceUrls,
           isEmergency: check.isEmergency,
           emergencyReason: check.emergencyReason,
         },

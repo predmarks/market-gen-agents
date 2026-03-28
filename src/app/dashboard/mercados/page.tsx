@@ -248,7 +248,7 @@ export default function MercadosPage() {
 
       {/* Sort controls */}
       {markets.length > 0 && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-gray-400">Ordenar:</span>
           {([['status', 'Estado'], ['score', 'Score'], ['date', 'Recientes'], ['volume', 'Volumen'], ['participants', 'Participantes']] as const).map(([key, label]) => (
             <button
@@ -271,7 +271,7 @@ export default function MercadosPage() {
 
       {/* Bulk action bar */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
           <span className="text-sm text-blue-700 font-medium">
             {selectedIds.size} mercado{selectedIds.size !== 1 ? 's' : ''} seleccionado{selectedIds.size !== 1 ? 's' : ''}
           </span>
@@ -312,7 +312,8 @@ export default function MercadosPage() {
                   : 'border-gray-200 bg-white'
               }`}
             >
-              <div className="flex items-center gap-2 px-3 py-2">
+              {/* Primary row: checkbox, status, title */}
+              <div className="flex items-center gap-2 px-3 pt-2 pb-1 md:pb-2">
                 {!isArchived ? (
                   <input
                     type="checkbox"
@@ -327,7 +328,7 @@ export default function MercadosPage() {
                 <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${badge.className}`}>
                   {badge.label}
                 </span>
-                {m.score != null && <ScoreBadge score={m.score} />}
+                {m.score != null && <span className="hidden md:inline"><ScoreBadge score={m.score} /></span>}
                 <span className="text-sm font-medium text-gray-800 truncate flex-1 min-w-0">
                   {m.title}
                 </span>
@@ -344,12 +345,46 @@ export default function MercadosPage() {
                     → {m.resolution.suggestedOutcome}
                   </span>
                 ) : null}
+                <span className="hidden md:inline text-xs text-gray-400 shrink-0">{m.category}</span>
+                {m.volume && (
+                  <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-50 text-emerald-600">${formatVolume(m.volume)}</span>
+                )}
+                {m.participants != null && m.participants > 0 && (
+                  <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-50 text-blue-600">{m.participants} participantes</span>
+                )}
+                {m.stale && (
+                  <span className="hidden md:inline text-[10px] text-orange-500 shrink-0">stale</span>
+                )}
+                {(() => {
+                  const timeInfo = formatTimeInfo(m.status, m.endTimestamp);
+                  if (!timeInfo) return null;
+                  return (
+                    <span className={`hidden md:inline shrink-0 text-[10px] ${m.status === 'in_resolution' ? 'text-amber-500' : 'text-gray-400'}`}>
+                      {timeInfo}
+                    </span>
+                  );
+                })()}
+                <div className="hidden md:flex ml-auto items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {isRejectable && (
+                    <button
+                      onClick={() => handleReject(m.id)}
+                      disabled={actionLoading === m.id || bulkLoading}
+                      className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-100 hover:bg-red-200 text-red-700 disabled:opacity-50 transition-colors cursor-pointer"
+                    >
+                      {actionLoading === m.id ? '...' : 'Rechazar'}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {/* Secondary row: metadata (mobile only) */}
+              <div className="flex md:hidden items-center gap-2 px-3 pb-2 pl-9 flex-wrap">
+                {m.score != null && <ScoreBadge score={m.score} />}
                 <span className="text-xs text-gray-400 shrink-0">{m.category}</span>
                 {m.volume && (
                   <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-50 text-emerald-600">${formatVolume(m.volume)}</span>
                 )}
                 {m.participants != null && m.participants > 0 && (
-                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-50 text-blue-600">{m.participants} participantes</span>
+                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-50 text-blue-600">{m.participants}</span>
                 )}
                 {m.stale && (
                   <span className="text-[10px] text-orange-500 shrink-0">stale</span>

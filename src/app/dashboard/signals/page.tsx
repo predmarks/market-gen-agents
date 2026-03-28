@@ -214,40 +214,60 @@ export default function SignalsPage() {
           {filteredSignals.map((s) => {
             const badge = TYPE_BADGE[s.type] ?? TYPE_BADGE.news;
             return (
-              <div key={s.id} className="flex items-start gap-2 px-3 py-2 text-xs">
-                <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${badge.className}`}>
-                  {badge.label}
-                </span>
-                {s.score != null && (
-                  <span
-                    className={`shrink-0 px-1 py-0.5 rounded text-[10px] font-mono mt-0.5 ${
-                      s.score >= 7 ? 'bg-green-100 text-green-700' :
-                      s.score >= 4 ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-gray-100 text-gray-500'
-                    }`}
-                    title={s.scoreReason ?? undefined}
-                  >
-                    {s.score.toFixed(1)}
+              <div key={s.id} className="px-3 py-2 text-xs">
+                {/* Primary: type badge + text */}
+                <div className="flex items-start gap-2">
+                  <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${badge.className}`}>
+                    {badge.label}
                   </span>
-                )}
-                <span className="shrink-0 text-gray-400 mt-0.5">{s.source}</span>
-                <span className="shrink-0 text-gray-300 mt-0.5">{formatDate(s.publishedAt)}</span>
-                <div className="min-w-0 flex-1 mt-0.5">
-                  <span className="text-gray-700">
-                    {s.url ? (
-                      <a href={s.url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline">
-                        {s.text}
-                      </a>
-                    ) : s.text}
-                  </span>
-                  {s.dataPoints && s.dataPoints.length > 0 && (
-                    <span className="text-gray-400 ml-1">
-                      {s.dataPoints.map((dp) => {
-                        const prev = dp.previousValue != null ? ` (ant: ${dp.previousValue})` : '';
-                        return `${dp.currentValue} ${dp.unit}${prev}`;
-                      }).join(', ')}
+                  {s.score != null && (
+                    <span
+                      className={`hidden md:inline shrink-0 px-1 py-0.5 rounded text-[10px] font-mono mt-0.5 ${
+                        s.score >= 7 ? 'bg-green-100 text-green-700' :
+                        s.score >= 4 ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-gray-100 text-gray-500'
+                      }`}
+                      title={s.scoreReason ?? undefined}
+                    >
+                      {s.score.toFixed(1)}
                     </span>
                   )}
+                  <span className="hidden md:inline shrink-0 text-gray-400 mt-0.5">{s.source}</span>
+                  <span className="hidden md:inline shrink-0 text-gray-300 mt-0.5">{formatDate(s.publishedAt)}</span>
+                  <div className="min-w-0 flex-1 mt-0.5">
+                    <span className="text-gray-700">
+                      {s.url ? (
+                        <a href={s.url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline">
+                          {s.text}
+                        </a>
+                      ) : s.text}
+                    </span>
+                    {s.dataPoints && s.dataPoints.length > 0 && (
+                      <span className="text-gray-400 ml-1">
+                        {s.dataPoints.map((dp) => {
+                          const prev = dp.previousValue != null ? ` (ant: ${dp.previousValue})` : '';
+                          return `${dp.currentValue} ${dp.unit}${prev}`;
+                        }).join(', ')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {/* Secondary: metadata (mobile only) */}
+                <div className="flex md:hidden items-center gap-2 mt-1 pl-10">
+                  {s.score != null && (
+                    <span
+                      className={`shrink-0 px-1 py-0.5 rounded text-[10px] font-mono ${
+                        s.score >= 7 ? 'bg-green-100 text-green-700' :
+                        s.score >= 4 ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-gray-100 text-gray-500'
+                      }`}
+                      title={s.scoreReason ?? undefined}
+                    >
+                      {s.score.toFixed(1)}
+                    </span>
+                  )}
+                  <span className="shrink-0 text-gray-400">{s.source}</span>
+                  <span className="shrink-0 text-gray-300">{formatDate(s.publishedAt)}</span>
                 </div>
               </div>
             );

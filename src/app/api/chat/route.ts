@@ -674,6 +674,20 @@ async function executeTool(block: Anthropic.ToolUseBlock, contextType: ContextTy
   }
 
   if (block.name === 'ingest_signals') {
+    // Guard: skip if ingestion was already triggered in the last 10 minutes
+    const [recentIngest] = await db
+      .select({ id: activityLog.id })
+      .from(activityLog)
+      .where(
+        and(
+          eq(activityLog.action, 'ingestion_started'),
+          gt(activityLog.createdAt, new Date(Date.now() - 10 * 60 * 1000)),
+        ),
+      )
+      .limit(1);
+    if (recentIngest) {
+      return 'Ya hay una ingesta en curso (lanzada hace menos de 10 minutos).';
+    }
     await inngest.send({ name: 'signals/ingest.requested', data: {} });
     await logActivity('ingestion_started', { entityType: 'system', entityLabel: 'RSS, datos económicos, Twitter', source: 'chat' });
     return 'Ingesta de señales iniciada. Se actualizarán señales y temas cuando termine.';
@@ -722,6 +736,21 @@ async function executeTool(block: Anthropic.ToolUseBlock, contextType: ContextTy
 
   if (block.name === 'review_market') {
     const { marketId } = block.input as { marketId: string };
+    // Guard: skip if a review was already triggered for this market in the last 10 minutes
+    const [recentReview] = await db
+      .select({ id: activityLog.id })
+      .from(activityLog)
+      .where(
+        and(
+          eq(activityLog.action, 'review_started'),
+          eq(activityLog.entityId, marketId),
+          gt(activityLog.createdAt, new Date(Date.now() - 10 * 60 * 1000)),
+        ),
+      )
+      .limit(1);
+    if (recentReview) {
+      return `Ya hay una revisión en curso para este mercado (lanzada hace menos de 10 minutos).`;
+    }
     await inngest.send({
       name: 'market/review.requested',
       data: { marketId },
@@ -732,6 +761,21 @@ async function executeTool(block: Anthropic.ToolUseBlock, contextType: ContextTy
 
   if (block.name === 'check_resolution') {
     const { marketId } = block.input as { marketId: string };
+    // Guard: skip if a resolution check was already triggered for this market in the last 10 minutes
+    const [recent] = await db
+      .select({ id: activityLog.id })
+      .from(activityLog)
+      .where(
+        and(
+          eq(activityLog.action, 'resolution_check_started'),
+          eq(activityLog.entityId, marketId),
+          gt(activityLog.createdAt, new Date(Date.now() - 10 * 60 * 1000)),
+        ),
+      )
+      .limit(1);
+    if (recent) {
+      return `Ya hay una verificación de resolución en curso para este mercado (lanzada hace menos de 10 minutos).`;
+    }
     await inngest.send({
       name: 'markets/resolution.check',
       data: { id: marketId },

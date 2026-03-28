@@ -274,7 +274,7 @@ export default function TopicsPage() {
 
       {/* Bulk action bar */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
           <span className="text-sm text-blue-700 font-medium">
             {selectedIds.size} tema{selectedIds.size !== 1 ? 's' : ''} seleccionado{selectedIds.size !== 1 ? 's' : ''}
           </span>
@@ -329,7 +329,7 @@ export default function TopicsPage() {
               }`}
             >
               {/* Header row — always visible */}
-              <div className="flex items-center gap-2 px-3 py-2">
+              <div className="flex items-center gap-2 px-3 pt-2 pb-1 md:pb-2">
                 {isResearching ? (
                   <span className="w-4 h-4 flex items-center justify-center shrink-0">
                     <span className="block w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
@@ -345,7 +345,7 @@ export default function TopicsPage() {
                 )}
                 {!isResearching && (
                   <span
-                    className={`px-1.5 py-0.5 rounded text-xs font-mono shrink-0 ${
+                    className={`hidden md:inline px-1.5 py-0.5 rounded text-xs font-mono shrink-0 ${
                       t.score >= 7
                         ? 'bg-green-100 text-green-700'
                         : t.score >= 4
@@ -369,7 +369,7 @@ export default function TopicsPage() {
                 >
                   {isResearching ? 'investigando...' : isRegular ? 'recurrente' : isStale ? 'inactivo' : 'activo'}
                 </span>
-                <span className={`text-sm truncate ${isResearching ? 'text-gray-500' : 'font-medium text-gray-800'}`}>{t.name}</span>
+                <span className={`text-sm truncate flex-1 min-w-0 ${isResearching ? 'text-gray-500' : 'font-medium text-gray-800'}`}>{t.name}</span>
                 {hasNewInfo && !isResearching && (
                   <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 shrink-0">
                     nueva info
@@ -377,8 +377,8 @@ export default function TopicsPage() {
                 )}
                 {!isResearching && (
                   <>
-                    <span className="text-xs text-gray-400 shrink-0">{t.category}</span>
-                    <span className={`text-[10px] shrink-0 px-1 py-0.5 rounded ${
+                    <span className="hidden md:inline text-xs text-gray-400 shrink-0">{t.category}</span>
+                    <span className={`hidden md:inline text-[10px] shrink-0 px-1 py-0.5 rounded ${
                       t.signalCount >= 50 ? 'bg-purple-100 text-purple-700' :
                       t.signalCount >= 20 ? 'bg-green-100 text-green-700' :
                       t.signalCount >= 10 ? 'bg-blue-100 text-blue-700' :
@@ -386,22 +386,20 @@ export default function TopicsPage() {
                       'text-gray-300'
                     }`}>{t.signalCount} señales</span>
                     {(t.conversationCount ?? 0) > 0 && (
-                      <span className="text-[10px] text-gray-300 shrink-0">{t.conversationCount} chat{t.conversationCount !== 1 ? 's' : ''}</span>
+                      <span className="hidden md:inline text-[10px] text-gray-300 shrink-0">{t.conversationCount} chat{t.conversationCount !== 1 ? 's' : ''}</span>
                     )}
                   </>
                 )}
                 <div className="ml-auto flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                   {!isResearching && (
-                    <>
-                      <button
-                        onClick={() => openDismissPrompt(t.id)}
-                        disabled={dismissing === t.id}
-                        className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 cursor-pointer"
-                        title="Descartar tema"
-                      >
-                        {dismissing === t.id ? '...' : 'descartar'}
-                      </button>
-                    </>
+                    <button
+                      onClick={() => openDismissPrompt(t.id)}
+                      disabled={dismissing === t.id}
+                      className="hidden md:inline text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 cursor-pointer"
+                      title="Descartar tema"
+                    >
+                      {dismissing === t.id ? '...' : 'descartar'}
+                    </button>
                   )}
                   {!isResearching && (
                     <button
@@ -414,6 +412,41 @@ export default function TopicsPage() {
                   )}
                 </div>
               </div>
+              {/* Secondary row: metadata (mobile only) */}
+              {!isResearching && (
+                <div className="flex md:hidden items-center gap-2 px-3 pb-2 pl-9 flex-wrap">
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-xs font-mono shrink-0 ${
+                      t.score >= 7
+                        ? 'bg-green-100 text-green-700'
+                        : t.score >= 4
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    {t.score.toFixed(1)}
+                  </span>
+                  <span className="text-xs text-gray-400 shrink-0">{t.category}</span>
+                  <span className={`text-[10px] shrink-0 px-1 py-0.5 rounded ${
+                    t.signalCount >= 50 ? 'bg-purple-100 text-purple-700' :
+                    t.signalCount >= 20 ? 'bg-green-100 text-green-700' :
+                    t.signalCount >= 10 ? 'bg-blue-100 text-blue-700' :
+                    t.signalCount >= 5 ? 'bg-yellow-100 text-yellow-700' :
+                    'text-gray-300'
+                  }`}>{t.signalCount} señales</span>
+                  {(t.conversationCount ?? 0) > 0 && (
+                    <span className="text-[10px] text-gray-300 shrink-0">{t.conversationCount} chat{t.conversationCount !== 1 ? 's' : ''}</span>
+                  )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openDismissPrompt(t.id); }}
+                    disabled={dismissing === t.id}
+                    className="ml-auto text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 cursor-pointer"
+                    title="Descartar tema"
+                  >
+                    {dismissing === t.id ? '...' : 'descartar'}
+                  </button>
+                </div>
+              )}
 
               {/* Expanded content */}
               {isResearching && (

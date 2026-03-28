@@ -3,7 +3,7 @@ import { db } from '@/db/client';
 import { markets, resolutionFeedback, signals as signalsTable } from '@/db/schema';
 import { eq, desc, isNotNull } from 'drizzle-orm';
 import { evaluateResolution } from '@/agents/resolver/evaluator';
-import { logActivity } from '@/lib/activity-log';
+import { logActivity, inngestRunUrl } from '@/lib/activity-log';
 import type { Resolution } from '@/db/types';
 
 function extractUrls(text: string): string[] {
@@ -45,10 +45,11 @@ async function fetchSourceContent(url: string): Promise<{ url: string; text: str
 }
 
 export const resolutionJob = inngest.createFunction(
-  { id: 'resolution-check', retries: 2, concurrency: [{ limit: 3 }, { limit: 1, key: 'event.data.id' }] },
+  { id: 'resolution-check', retries: 5, concurrency: [{ limit: 2 }, { limit: 1, key: 'event.data.id' }] },
   { event: 'markets/resolution.check' },
-  async ({ event, step }) => {
+  async ({ event, step, runId }) => {
     const marketId = event.data.id as string;
+    const runUrl = inngestRunUrl('resolution-check', runId);
 
     const market = await step.run('load-market', async () => {
       const [m] = await db.select().from(markets).where(eq(markets.id, marketId));
@@ -132,6 +133,7 @@ export const resolutionJob = inngest.createFunction(
             confidence: check.confidence,
             evidence: check.evidence,
             evidenceUrls: check.evidenceUrls,
+            inngestRunUrl: runUrl,
           },
           source: 'pipeline',
         });
@@ -173,6 +175,7 @@ export const resolutionJob = inngest.createFunction(
           evidenceUrls: check.evidenceUrls,
           isEmergency: check.isEmergency,
           emergencyReason: check.emergencyReason,
+          inngestRunUrl: runUrl,
         },
         source: 'pipeline',
       });

@@ -10,7 +10,7 @@ import { checkRules } from '@/agents/reviewer/rules-checker';
 import { scoreMarket } from '@/agents/reviewer/scorer';
 import { improveMarket } from '@/agents/reviewer/improver';
 import { logMarketEvent } from '@/lib/market-events';
-import { logActivity } from '@/lib/activity-log';
+import { logActivity, inngestRunUrl } from '@/lib/activity-log';
 import type { MarketRecord } from '@/agents/reviewer/types';
 
 function buildFeedback(
@@ -73,8 +73,9 @@ export const reviewJob = inngest.createFunction(
     cancelOn: [{ event: 'market/review.cancel', if: 'async.data.id == event.data.id' }],
   },
   { event: 'market/candidate.created' },
-  async ({ event, step }) => {
+  async ({ event, step, runId }) => {
     const marketId = event.data.id as string;
+    const runUrl = inngestRunUrl('review-pipeline', runId);
 
     // Init: load market, set status to processing, log start
     const initResult = await step.run('init', async () => {
@@ -218,7 +219,7 @@ export const reviewJob = inngest.createFunction(
             detail: { reason: `Unfixable rule: ${unfixableFail.ruleId}` },
           });
         });
-        await logActivity('review_completed', { entityType: 'market', entityId: marketId, entityLabel: initResult.market.title, detail: { result: 'rejected', reason: `Unfixable rule: ${unfixableFail.ruleId}`, iteration: i }, source: 'pipeline' });
+        await logActivity('review_completed', { entityType: 'market', entityId: marketId, entityLabel: initResult.market.title, detail: { result: 'rejected', reason: `Unfixable rule: ${unfixableFail.ruleId}`, iteration: i, inngestRunUrl: runUrl }, source: 'pipeline' });
         return { status: 'rejected', marketId, reason: `Unfixable rule: ${unfixableFail.ruleId}`, iteration: i };
       }
 
@@ -284,7 +285,7 @@ export const reviewJob = inngest.createFunction(
             detail: { score: scoring.scores.overallScore },
           });
         });
-        await logActivity('review_completed', { entityType: 'market', entityId: marketId, entityLabel: initResult.market.title, detail: { result: 'opened', score: scoring.scores.overallScore, iteration: i }, source: 'pipeline' });
+        await logActivity('review_completed', { entityType: 'market', entityId: marketId, entityLabel: initResult.market.title, detail: { result: 'opened', score: scoring.scores.overallScore, iteration: i, inngestRunUrl: runUrl }, source: 'pipeline' });
         return { status: 'candidate', marketId, iteration: i, score: scoring.scores.overallScore };
       }
 
@@ -301,7 +302,7 @@ export const reviewJob = inngest.createFunction(
             detail: { score: scoring.scores.overallScore, reason: 'Below threshold after max iterations' },
           });
         });
-        await logActivity('review_completed', { entityType: 'market', entityId: marketId, entityLabel: initResult.market.title, detail: { result: 'rejected', reason: 'Below threshold after max iterations', score: scoring.scores.overallScore }, source: 'pipeline' });
+        await logActivity('review_completed', { entityType: 'market', entityId: marketId, entityLabel: initResult.market.title, detail: { result: 'rejected', reason: 'Below threshold after max iterations', score: scoring.scores.overallScore, inngestRunUrl: runUrl }, source: 'pipeline' });
         return { status: 'rejected', marketId, reason: 'Below threshold after max iterations', score: scoring.scores.overallScore };
       }
 

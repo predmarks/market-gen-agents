@@ -1,6 +1,10 @@
 import { db } from '@/db/client';
 import { activityLog } from '@/db/schema';
 
+export function inngestRunUrl(functionId: string, runId: string): string {
+  return `https://app.inngest.com/env/production/functions/${functionId}/logs/${runId}`;
+}
+
 export async function logActivity(
   action: string,
   opts: {

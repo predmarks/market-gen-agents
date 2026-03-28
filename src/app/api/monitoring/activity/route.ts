@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     .select()
     .from(markets)
     .orderBy(desc(markets.createdAt))
-    .limit(50);
+    .limit(500);
 
   let rows;
   if (filterStatus) {

@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { db } from '@/db/client';
 import { llmUsage } from '@/db/schema';
 
-const client = new Anthropic({ maxRetries: 2 });
+const client = new Anthropic({ maxRetries: 5 });
 
 const MODEL_SONNET = 'claude-sonnet-4-20250514';
 const MODEL_OPUS = 'claude-opus-4-20250514';

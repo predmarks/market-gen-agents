@@ -5,12 +5,13 @@ import { eq, inArray, and, or, isNull, gt } from 'drizzle-orm';
 import { generateMarkets } from '@/agents/sourcer/generator';
 import { deduplicateCandidates } from '@/agents/sourcer/deduplication';
 import type { Topic } from '@/agents/sourcer/types';
-import { logActivity } from '@/lib/activity-log';
+import { logActivity, inngestRunUrl } from '@/lib/activity-log';
 
 export const generationJob = inngest.createFunction(
-  { id: 'generation-pipeline', retries: 1 },
+  { id: 'generation-pipeline', retries: 5, concurrency: { limit: 1 } },
   { event: 'markets/generate.requested' },
-  async ({ event, step }) => {
+  async ({ event, step, runId }) => {
+    const runUrl = inngestRunUrl('generation-pipeline', runId);
     const topicIds = (event.data?.topicIds as string[] | undefined) ?? [];
     const targetCount = Number(event.data?.count) || 10;
     const marketType = event.data?.marketType as 'binary' | 'multi-outcome' | undefined;
@@ -160,6 +161,7 @@ export const generationJob = inngest.createFunction(
         savedMarkets: savedIds.map((id, i) => ({ id, title: unique[i]?.title ?? id })),
         topicNames: topicsForGeneration.map((t) => t.name),
         duplicatesRemoved: candidates.length - unique.length,
+        inngestRunUrl: runUrl,
       },
       source: 'pipeline',
     });
@@ -170,7 +172,7 @@ export const generationJob = inngest.createFunction(
         entityType: 'market',
         entityId: savedIds[i],
         entityLabel: unique[i]?.title ?? savedIds[i],
-        detail: { topicNames: topicsForGeneration.map((t) => t.name) },
+        detail: { topicNames: topicsForGeneration.map((t) => t.name), inngestRunUrl: runUrl },
         source: 'pipeline',
       });
     }
@@ -186,6 +188,7 @@ export const generationJob = inngest.createFunction(
         detail: {
           savedMarkets: savedIds.map((id, i) => ({ id, title: unique[i]?.title ?? id })),
           topicSlug: t.slug,
+          inngestRunUrl: runUrl,
         },
         source: 'pipeline',
       });

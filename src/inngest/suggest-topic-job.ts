@@ -8,7 +8,7 @@ import { updateTopics } from '@/agents/sourcer/topic-extractor';
 import { slugify } from '@/agents/sourcer/types';
 import type { Topic, SourceSignal } from '@/agents/sourcer/types';
 import type { MarketCategory } from '@/db/types';
-import { logActivity } from '@/lib/activity-log';
+import { logActivity, inngestRunUrl } from '@/lib/activity-log';
 
 const RESEARCH_SCHEMA = {
   type: 'object' as const,
@@ -78,9 +78,10 @@ IMPORTANTE:
 - Todo en español argentino`;
 
 export const suggestTopicJob = inngest.createFunction(
-  { id: 'suggest-topic', retries: 1 },
+  { id: 'suggest-topic', retries: 8, concurrency: { limit: 1 }, throttle: { limit: 1, period: '1m' } },
   { event: 'topics/suggest.requested' },
-  async ({ event, step }) => {
+  async ({ event, step, runId }) => {
+    const runUrl = inngestRunUrl('suggest-topic', runId);
     const description = event.data.description as string;
     const placeholderTopicId = event.data.topicId as string | undefined;
 
@@ -396,6 +397,7 @@ export const suggestTopicJob = inngest.createFunction(
           signalCount: result.signals.length,
           signals: result.signals,
           ...(marketId ? { linkedMarketId: marketId } : {}),
+          inngestRunUrl: runUrl,
         },
         source: 'pipeline',
       });

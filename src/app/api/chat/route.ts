@@ -13,7 +13,7 @@ import { loadGenerationPrompt, saveGenerationPrompt } from '@/agents/sourcer/gen
 import { loadResolutionPrompt, saveResolutionPrompt } from '@/agents/resolver/evaluator';
 import { syncDeployedMarkets } from '@/lib/sync-deployed';
 
-const client = new Anthropic({ maxRetries: 2 });
+const client = new Anthropic({ maxRetries: 5 });
 
 async function loadChatPrompt(): Promise<string> {
   try {

@@ -7,7 +7,7 @@ import { logMarketEvent } from '@/lib/market-events';
 import { logUsage } from '@/lib/llm';
 import { HARD_RULES, SOFT_RULES } from '@/config/rules';
 
-const client = new Anthropic({ maxRetries: 2 });
+const client = new Anthropic({ maxRetries: 5 });
 
 const SYSTEM_PROMPT = `Sos un asistente de control de calidad para Predmarks, una plataforma argentina de mercados de predicción.
 El usuario te da feedback sobre un mercado. Tenés una conversación natural:

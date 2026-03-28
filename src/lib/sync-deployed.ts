@@ -83,6 +83,52 @@ export async function syncDeployedMarkets(): Promise<{
           participants: om.participants,
         }).where(eq(markets.id, existing.id));
         updated++;
+      } else {
+        // Resolved market not yet in DB — import it
+        let outcomes: string[] = [];
+        try {
+          const onchainData = await fetchOnchainMarketData(Number(om.onchainId));
+          outcomes = onchainData.outcomes;
+        } catch { /* use empty */ }
+
+        const outcome = mapResolvedOutcome(om.resolvedTo, outcomes);
+        const expectedResolutionDate = toDateString(om.endTimestamp);
+        const sourceContext: SourceContext = {
+          originType: 'manual',
+          generatedAt: new Date().toISOString(),
+        };
+
+        const [inserted] = await db.insert(markets).values({
+          onchainId: om.onchainId,
+          onchainAddress: om.id,
+          title: om.name,
+          description: '',
+          resolutionCriteria: '',
+          resolutionSource: '',
+          category: om.category,
+          endTimestamp: om.endTimestamp,
+          expectedResolutionDate,
+          volume: om.volume,
+          participants: om.participants,
+          status: 'closed',
+          outcome: outcome ?? undefined,
+          outcomes: outcomes.length > 0 ? outcomes : undefined,
+          resolvedAt: new Date(),
+          sourceContext,
+        }).returning({ id: markets.id });
+
+        created++;
+        resolved++;
+
+        logActivity('market_synced', {
+          entityType: 'market',
+          entityId: inserted.id,
+          entityLabel: om.name,
+          detail: { onchainId: om.onchainId, status: 'closed', outcome, resolvedTo: om.resolvedTo },
+          source: 'pipeline',
+        }).catch(() => {});
+
+        toExpand.push({ id: inserted.id, onchainId: om.onchainId, title: om.name, category: om.category, endTimestamp: om.endTimestamp });
       }
       continue;
     }

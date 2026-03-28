@@ -6,7 +6,7 @@ import { ingestAllSources, markSignalsUsed } from '@/agents/sourcer/ingestion';
 import { updateTopics, markStaleTopics } from '@/agents/sourcer/topic-extractor';
 import type { SourcingStep } from '@/db/types';
 import type { Topic } from '@/agents/sourcer/types';
-import { logActivity } from '@/lib/activity-log';
+import { logActivity, inngestRunUrl } from '@/lib/activity-log';
 
 const STEP_NAMES = ['ingest', 'update-topics'] as const;
 
@@ -19,9 +19,10 @@ function buildSteps(currentIdx: number, detail?: string): SourcingStep[] {
 }
 
 export const ingestionJob = inngest.createFunction(
-  { id: 'ingestion-pipeline', retries: 1 },
+  { id: 'ingestion-pipeline', retries: 3, concurrency: { limit: 1 } },
   { event: 'signals/ingest.requested' },
-  async ({ step }) => {
+  async ({ step, runId: inngestId }) => {
+    const runUrl = inngestRunUrl('ingestion-pipeline', inngestId);
     // Create run record
     const runId = await step.run('init-run', async () => {
       const [run] = await db
@@ -32,7 +33,7 @@ export const ingestionJob = inngest.createFunction(
           steps: buildSteps(0),
         })
         .returning({ id: sourcingRuns.id });
-      await logActivity('ingestion_started', { entityType: 'system', source: 'pipeline' });
+      await logActivity('ingestion_started', { entityType: 'system', detail: { inngestRunUrl: runUrl }, source: 'pipeline' });
       return run.id;
     });
 
@@ -312,6 +313,7 @@ export const ingestionJob = inngest.createFunction(
           signalsBySource,
           signals: ingestionResult.signals.map((s) => ({ source: s.source, text: s.text.slice(0, 150), url: s.url ?? null })),
           topics: freshTopicDetails.map((t) => ({ id: t.id, name: t.name, slug: t.slug })),
+          inngestRunUrl: runUrl,
         },
         source: 'pipeline',
       });
@@ -353,7 +355,7 @@ export const ingestionJob = inngest.createFunction(
           completedAt: new Date(),
         })
         .where(eq(sourcingRuns.id, runId));
-      await logActivity('ingestion_failed', { entityType: 'system', detail: { error: err instanceof Error ? err.message : String(err) }, source: 'pipeline' });
+      await logActivity('ingestion_failed', { entityType: 'system', detail: { error: err instanceof Error ? err.message : String(err), inngestRunUrl: runUrl }, source: 'pipeline' });
       throw err;
     }
   },

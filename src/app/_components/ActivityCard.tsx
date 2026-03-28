@@ -457,9 +457,23 @@ export function ActivityCard({ entry, defaultExpanded = false, compact = false }
         {hasDetail && <span className="text-[10px] text-gray-300 ml-auto shrink-0">{expanded ? '▲' : '▼'}</span>}
       </div>
 
-      {/* Row 2: Timestamp + used by */}
+      {/* Row 2: Timestamp + used by + inngest link */}
       <p className="text-[10px] text-gray-400">
         {formatTime(entry.createdAt)} · Usado por: {usedBy}
+        {typeof entry.detail?.inngestRunUrl === 'string' && (
+          <span>
+            {' · '}
+            <a
+              href={entry.detail.inngestRunUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-blue-500 hover:underline"
+            >
+              ver proceso
+            </a>
+          </span>
+        )}
       </p>
 
       {/* Row 3: Content (collapsed by default) or preview */}

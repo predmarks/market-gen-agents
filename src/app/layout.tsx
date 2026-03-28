@@ -35,7 +35,7 @@ export default async function RootLayout({
       >
         {hasSession && <Nav />}
         <div className={`flex ${hasSession ? 'h-[calc(100vh-3.25rem)]' : ''}`}>
-          <main className="flex-1 overflow-y-auto px-6 py-6">{children}</main>
+          <main className="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">{children}</main>
           {hasSession && <MiniChat />}
         </div>
       </body>

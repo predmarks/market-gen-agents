@@ -331,20 +331,34 @@ export function MiniChat() {
 
   if (!open) {
     return (
-      <div className="w-10 shrink-0 bg-white border-r border-gray-200 flex flex-col items-center pt-4 order-first">
+      <>
+        {/* Desktop: sidebar toggle */}
+        <div className="hidden md:flex w-10 shrink-0 bg-white border-r border-gray-200 flex-col items-center pt-4 order-first">
+          <button
+            onClick={() => setOpen(true)}
+            className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded flex items-center justify-center text-sm cursor-pointer transition-colors"
+            title="Abrir chat"
+          >
+            💬
+          </button>
+        </div>
+        {/* Mobile: floating FAB */}
         <button
           onClick={() => setOpen(true)}
-          className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded flex items-center justify-center text-sm cursor-pointer transition-colors"
+          className="md:hidden fixed bottom-4 right-4 z-50 w-12 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-lg cursor-pointer transition-colors"
           title="Abrir chat"
         >
           💬
         </button>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="shrink-0 bg-white border-r border-gray-200 flex order-first" style={{ width }}>
+    <div
+      className="fixed inset-0 z-50 bg-white flex flex-col md:static md:inset-auto md:z-auto md:shrink-0 md:bg-white md:border-r md:border-gray-200 md:flex-row md:order-first"
+      style={{ width }}
+    >
       <div className="flex-1 flex flex-col min-w-0">
       {/* Header */}
       <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-end gap-2 shrink-0">
@@ -487,10 +501,10 @@ export function MiniChat() {
         {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
       </div>
       </div>
-      {/* Resize handle */}
+      {/* Resize handle — desktop only */}
       <div
         onMouseDown={handleResizeStart}
-        className="w-1.5 bg-gray-200 hover:bg-blue-400 cursor-col-resize shrink-0 transition-colors"
+        className="hidden md:block w-1.5 bg-gray-200 hover:bg-blue-400 cursor-col-resize shrink-0 transition-colors"
       />
     </div>
   );

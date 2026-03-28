@@ -23,8 +23,8 @@ export function Nav() {
   }
 
   return (
-    <nav className="bg-white border-b border-gray-200 px-6 py-3">
-      <div className="flex items-center gap-6">
+    <nav className="bg-white border-b border-gray-200 px-4 md:px-6 py-3 overflow-x-auto">
+      <div className="flex items-center gap-4 md:gap-6 min-w-max">
         <Link href="/" className="text-lg font-bold text-gray-900">
           Predmarks
         </Link>

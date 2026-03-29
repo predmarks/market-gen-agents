@@ -11,6 +11,7 @@ import { scoreMarket } from '@/agents/reviewer/scorer';
 import { improveMarket } from '@/agents/reviewer/improver';
 import { logMarketEvent } from '@/lib/market-events';
 import { logActivity, inngestRunUrl } from '@/lib/activity-log';
+import { setCurrentRunId } from '@/lib/llm';
 import type { MarketRecord } from '@/agents/reviewer/types';
 
 function buildFeedback(
@@ -76,6 +77,7 @@ export const reviewJob = inngest.createFunction(
   async ({ event, step, runId }) => {
     const marketId = event.data.id as string;
     const runUrl = inngestRunUrl('review-pipeline', runId);
+    setCurrentRunId(`review-pipeline/${runId}`);
 
     // Init: load market, set status to processing, log start
     const initResult = await step.run('init', async () => {

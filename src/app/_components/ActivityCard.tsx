@@ -457,7 +457,7 @@ export function ActivityCard({ entry, defaultExpanded = false, compact = false }
         {hasDetail && <span className="text-[10px] text-gray-300 ml-auto shrink-0">{expanded ? '▲' : '▼'}</span>}
       </div>
 
-      {/* Row 2: Timestamp + used by + inngest link */}
+      {/* Row 2: Timestamp + used by + inngest link + activity log link */}
       <p className="text-[10px] text-gray-400">
         {formatTime(entry.createdAt)} · Usado por: {usedBy}
         {typeof entry.detail?.inngestRunUrl === 'string' && (
@@ -474,6 +474,14 @@ export function ActivityCard({ entry, defaultExpanded = false, compact = false }
             </a>
           </span>
         )}
+        {' · '}
+        <Link
+          href={`/dashboard/activity#entry-${entry.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-blue-500 hover:underline"
+        >
+          ver en log
+        </Link>
       </p>
 
       {/* Row 3: Content (collapsed by default) or preview */}

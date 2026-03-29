@@ -9,6 +9,7 @@ import { slugify } from '@/agents/sourcer/types';
 import type { Topic, SourceSignal } from '@/agents/sourcer/types';
 import type { MarketCategory } from '@/db/types';
 import { logActivity, inngestRunUrl } from '@/lib/activity-log';
+import { setCurrentRunId } from '@/lib/llm';
 
 const RESEARCH_SCHEMA = {
   type: 'object' as const,
@@ -82,6 +83,7 @@ export const suggestTopicJob = inngest.createFunction(
   { event: 'topics/suggest.requested' },
   async ({ event, step, runId }) => {
     const runUrl = inngestRunUrl('suggest-topic', runId);
+    setCurrentRunId(`suggest-topic/${runId}`);
     const description = event.data.description as string;
     const placeholderTopicId = event.data.topicId as string | undefined;
 

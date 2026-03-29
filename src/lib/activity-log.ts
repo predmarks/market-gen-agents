@@ -2,6 +2,9 @@ import { db } from '@/db/client';
 import { activityLog } from '@/db/schema';
 
 export function inngestRunUrl(functionId: string, runId: string): string {
+  if (process.env.NODE_ENV !== 'production') {
+    return `http://localhost:8288/stream/trigger/${runId}`;
+  }
   return `https://app.inngest.com/env/production/functions/${functionId}/logs/${runId}`;
 }
 

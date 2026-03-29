@@ -4,9 +4,15 @@ import { sourcingRuns, topics as topicsTable, topicSignals, markets } from '@/db
 import { eq, sql, inArray } from 'drizzle-orm';
 import { ingestAllSources, markSignalsUsed } from '@/agents/sourcer/ingestion';
 import { updateTopics, markStaleTopics } from '@/agents/sourcer/topic-extractor';
+import { getEmbeddings, cosineSimilarity } from '@/agents/sourcer/deduplication';
+import OpenAI from 'openai';
 import type { SourcingStep } from '@/db/types';
 import type { Topic } from '@/agents/sourcer/types';
+import type { TopicUpdate } from '@/agents/sourcer/topic-extractor';
 import { logActivity, inngestRunUrl } from '@/lib/activity-log';
+import { setCurrentRunId } from '@/lib/llm';
+
+const TOPIC_DEDUP_THRESHOLD = 0.80;
 
 const STEP_NAMES = ['ingest', 'update-topics'] as const;
 
@@ -23,6 +29,7 @@ export const ingestionJob = inngest.createFunction(
   { event: 'signals/ingest.requested' },
   async ({ step, runId: inngestId }) => {
     const runUrl = inngestRunUrl('ingestion-pipeline', inngestId);
+    setCurrentRunId(`ingestion-pipeline/${inngestId}`);
     // Create run record
     const runId = await step.run('init-run', async () => {
       const [run] = await db
@@ -97,6 +104,58 @@ export const ingestionJob = inngest.createFunction(
         const now = new Date();
         const updatedTopicIds: string[] = [];
 
+        // Embedding-based dedup for CREATE actions
+        const creates = topicUpdates.filter((u) => u.action === 'create');
+        if (creates.length > 0 && process.env.OPENAI_API_KEY) {
+          const openai = new OpenAI();
+
+          // Get or compute embeddings for existing topics
+          const existingWithEmbeddings = existingTopicRows.filter((t) => t.embedding);
+          const existingWithoutEmbeddings = existingTopicRows.filter((t) => !t.embedding);
+
+          // Embed any existing topics missing embeddings
+          let existingEmbeddings: { slug: string; embedding: number[] }[] =
+            existingWithEmbeddings.map((t) => ({ slug: t.slug, embedding: t.embedding as number[] }));
+
+          if (existingWithoutEmbeddings.length > 0) {
+            const texts = existingWithoutEmbeddings.map((t) => `${t.name}: ${t.summary}`);
+            const newEmbeddings = await getEmbeddings(openai, texts);
+            for (let i = 0; i < existingWithoutEmbeddings.length; i++) {
+              const topic = existingWithoutEmbeddings[i];
+              existingEmbeddings.push({ slug: topic.slug, embedding: newEmbeddings[i] });
+              // Cache embedding in DB
+              await db
+                .update(topicsTable)
+                .set({ embedding: newEmbeddings[i] })
+                .where(eq(topicsTable.id, topic.id));
+            }
+          }
+
+          // Embed new CREATE candidates
+          const createTexts = creates.map((c) => `${c.name}: ${c.summary}`);
+          const createEmbeddings = await getEmbeddings(openai, createTexts);
+
+          // Check each CREATE against existing topics
+          for (let i = 0; i < creates.length; i++) {
+            const create = creates[i];
+            const createEmb = createEmbeddings[i];
+            let bestMatch: { slug: string; similarity: number } | null = null;
+
+            for (const existing of existingEmbeddings) {
+              const sim = cosineSimilarity(createEmb, existing.embedding);
+              if (sim > TOPIC_DEDUP_THRESHOLD && (!bestMatch || sim > bestMatch.similarity)) {
+                bestMatch = { slug: existing.slug, similarity: sim };
+              }
+            }
+
+            if (bestMatch) {
+              console.log(`Topic dedup: "${create.name}" is ${(bestMatch.similarity * 100).toFixed(0)}% similar to existing topic "${bestMatch.slug}" — converting CREATE to UPDATE`);
+              create.action = 'update' as TopicUpdate['action'];
+              create.existingTopicSlug = bestMatch.slug;
+            }
+          }
+        }
+
         // Build a map of signal indices to signal DB IDs
         const signalIdMap = new Map<number, string>();
         ingestionResult.signals.forEach((s, i) => {
@@ -143,63 +202,37 @@ export const ingestionJob = inngest.createFunction(
 
             updatedTopicIds.push(existing.id);
           } else if (update.action === 'merge' && update.existingTopicSlug && update.mergeFromSlugs?.length) {
-            // Merge: absorb source topics into target
+            // Merges are destructive — log as suggestion instead of executing
             const target = existingTopicRows.find((t) => t.slug === update.existingTopicSlug);
-            if (!target) continue;
-
-            // Move signals from source topics to target
-            for (const sourceSlug of update.mergeFromSlugs) {
-              const source = existingTopicRows.find((t) => t.slug === sourceSlug);
-              if (!source) continue;
-
-              // Reassign signals
-              await db
-                .update(topicSignals)
-                .set({ topicId: target.id })
-                .where(eq(topicSignals.topicId, source.id));
-
-              // Dismiss source topic
-              await db
-                .update(topicsTable)
-                .set({ status: 'dismissed', updatedAt: now })
-                .where(eq(topicsTable.id, source.id));
-
-              console.log(`Merged topic "${source.name}" into "${target.name}"`);
-            }
-
-            // Count total signals after merge
-            const [{ count: totalSignals }] = await db
-              .select({ count: sql<number>`count(*)::int` })
-              .from(topicSignals)
-              .where(eq(topicSignals.topicId, target.id));
-
-            // Update target with new info
-            await db
-              .update(topicsTable)
-              .set({
-                name: update.name,
-                slug: update.slug,
+            const sourceNames = update.mergeFromSlugs
+              .map((slug) => existingTopicRows.find((t) => t.slug === slug)?.name ?? slug)
+              .join(', ');
+            console.log(`Merge suggested: "${sourceNames}" → "${target?.name ?? update.existingTopicSlug}" (not executed — requires manual approval)`);
+            await logActivity('merge_suggested', {
+              entityType: 'topic',
+              entityId: target?.id,
+              entityLabel: target?.name ?? update.existingTopicSlug,
+              detail: {
+                targetSlug: update.existingTopicSlug,
+                sourceSlugs: update.mergeFromSlugs,
+                sourceNames,
                 summary: update.summary,
-                score: update.score,
-                suggestedAngles: update.suggestedAngles,
-                signalCount: totalSignals,
-                lastSignalAt: now,
-                updatedAt: now,
-              })
-              .where(eq(topicsTable.id, target.id));
-
-            // Link new signals
-            for (const idx of update.signalIndices) {
-              const signalId = signalIdMap.get(idx);
-              if (signalId) {
-                await db
-                  .insert(topicSignals)
-                  .values({ topicId: target.id, signalId })
-                  .onConflictDoNothing();
+              },
+              source: 'pipeline',
+            });
+            // Still link new signals to the target topic if it exists
+            if (target) {
+              for (const idx of update.signalIndices) {
+                const signalId = signalIdMap.get(idx);
+                if (signalId) {
+                  await db
+                    .insert(topicSignals)
+                    .values({ topicId: target.id, signalId })
+                    .onConflictDoNothing();
+                }
               }
+              updatedTopicIds.push(target.id);
             }
-
-            updatedTopicIds.push(target.id);
           } else if (update.action === 'split' && update.splitFromSlug) {
             // Split: create new topic from part of an existing one
             const source = existingTopicRows.find((t) => t.slug === update.splitFromSlug);

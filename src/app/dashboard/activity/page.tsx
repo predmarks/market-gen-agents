@@ -65,7 +65,7 @@ export default function ActivityPage() {
       {entries.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-50">
           {entries.map((entry) => (
-            <div key={entry.id} className="px-4 py-2.5">
+            <div key={entry.id} id={`entry-${entry.id}`} className="px-4 py-2.5">
               <ActivityCard entry={entry} />
             </div>
           ))}

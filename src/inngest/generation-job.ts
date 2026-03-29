@@ -6,12 +6,14 @@ import { generateMarkets } from '@/agents/sourcer/generator';
 import { deduplicateCandidates } from '@/agents/sourcer/deduplication';
 import type { Topic } from '@/agents/sourcer/types';
 import { logActivity, inngestRunUrl } from '@/lib/activity-log';
+import { setCurrentRunId } from '@/lib/llm';
 
 export const generationJob = inngest.createFunction(
   { id: 'generation-pipeline', retries: 5, concurrency: { limit: 1 } },
   { event: 'markets/generate.requested' },
   async ({ event, step, runId }) => {
     const runUrl = inngestRunUrl('generation-pipeline', runId);
+    setCurrentRunId(`generation-pipeline/${runId}`);
     const topicIds = (event.data?.topicIds as string[] | undefined) ?? [];
     const targetCount = Number(event.data?.count) || 10;
     const marketType = event.data?.marketType as 'binary' | 'multi-outcome' | undefined;

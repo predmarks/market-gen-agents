@@ -4,6 +4,7 @@ import { markets, resolutionFeedback, signals as signalsTable } from '@/db/schem
 import { eq, desc, isNotNull } from 'drizzle-orm';
 import { evaluateResolution } from '@/agents/resolver/evaluator';
 import { logActivity, inngestRunUrl } from '@/lib/activity-log';
+import { setCurrentRunId } from '@/lib/llm';
 import type { Resolution } from '@/db/types';
 
 function extractUrls(text: string): string[] {
@@ -50,6 +51,7 @@ export const resolutionJob = inngest.createFunction(
   async ({ event, step, runId }) => {
     const marketId = event.data.id as string;
     const runUrl = inngestRunUrl('resolution-check', runId);
+    setCurrentRunId(`resolution-check/${runId}`);
 
     const market = await step.run('load-market', async () => {
       const [m] = await db.select().from(markets).where(eq(markets.id, marketId));

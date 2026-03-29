@@ -1,6 +1,6 @@
 import { db } from '@/db/client';
 import { llmUsage, markets, marketEvents } from '@/db/schema';
-import { sql, gte, eq, and, desc } from 'drizzle-orm';
+import { sql, gte, eq, and, desc, asc } from 'drizzle-orm';
 
 export const COST_PER_MTOK = {
   input: { 'claude-sonnet-4-20250514': 3, 'claude-opus-4-20250514': 15 } as Record<string, number>,
@@ -172,4 +172,79 @@ export async function getUsageData(): Promise<UsageData> {
     month: { byOperation: month },
     costPerMarket: { average: avgCostPerMarket, markets: costPerMarketList.slice(0, 20) },
   };
+}
+
+// --- Daily chart + operation log ---
+
+export interface DailyOpCost {
+  date: string;
+  operation: string;
+  cost: number;
+  calls: number;
+}
+
+export interface UsageLogEntry {
+  id: string;
+  operation: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cost: number;
+  runId: string | null;
+  createdAt: Date;
+}
+
+export async function getDailyChartData(days: number = 30): Promise<DailyOpCost[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({
+      date: sql<string>`to_char(${llmUsage.createdAt}::date, 'YYYY-MM-DD')`,
+      operation: llmUsage.operation,
+      model: llmUsage.model,
+      calls: sql<number>`count(*)::int`,
+      inputTokens: sql<number>`sum(${llmUsage.inputTokens})::int`,
+      outputTokens: sql<number>`sum(${llmUsage.outputTokens})::int`,
+    })
+    .from(llmUsage)
+    .where(gte(llmUsage.createdAt, since))
+    .groupBy(sql`${llmUsage.createdAt}::date`, llmUsage.operation, llmUsage.model)
+    .orderBy(asc(sql`${llmUsage.createdAt}::date`));
+
+  // Aggregate across models per day+operation
+  const map = new Map<string, DailyOpCost>();
+  for (const r of rows) {
+    const key = `${r.date}:${r.operation}`;
+    const existing = map.get(key);
+    const cost = estimateCost(r.model, r.inputTokens, r.outputTokens);
+    if (existing) {
+      existing.cost += cost;
+      existing.calls += r.calls;
+    } else {
+      map.set(key, { date: r.date, operation: r.operation, cost, calls: r.calls });
+    }
+  }
+  return Array.from(map.values());
+}
+
+export async function getUsageLog(days: number = 30): Promise<UsageLogEntry[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({
+      id: llmUsage.id,
+      operation: llmUsage.operation,
+      model: llmUsage.model,
+      inputTokens: llmUsage.inputTokens,
+      outputTokens: llmUsage.outputTokens,
+      runId: llmUsage.runId,
+      createdAt: llmUsage.createdAt,
+    })
+    .from(llmUsage)
+    .where(gte(llmUsage.createdAt, since))
+    .orderBy(desc(llmUsage.createdAt))
+    .limit(500);
+
+  return rows.map((r) => ({
+    ...r,
+    cost: estimateCost(r.model, r.inputTokens, r.outputTokens),
+  }));
 }

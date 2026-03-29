@@ -1,7 +1,27 @@
 export const dynamic = 'force-dynamic';
 
-import { getUsageData, formatTokens, type OperationUsage } from '@/lib/usage';
+import { getUsageData, getDailyChartData, getUsageLog, formatTokens, estimateCost, type OperationUsage, type DailyOpCost, type UsageLogEntry } from '@/lib/usage';
 import { TOKEN_BUDGETS } from '@/lib/llm';
+import Link from 'next/link';
+
+const OP_COLORS: Record<string, string> = {
+  data_verify:          'bg-blue-500',
+  rules_check:          'bg-indigo-400',
+  score_market:         'bg-purple-400',
+  improve_market:       'bg-pink-500',
+  extract_topics:       'bg-amber-500',
+  generate_markets:     'bg-orange-500',
+  research_topic:       'bg-teal-500',
+  resolve_check:        'bg-green-500',
+  score_signals:        'bg-cyan-400',
+  rescore_topic:        'bg-lime-500',
+  match_markets_topics: 'bg-gray-400',
+  expand_market:        'bg-rose-400',
+};
+
+const INNGEST_BASE = process.env.NODE_ENV !== 'production'
+  ? 'http://localhost:8288/stream/trigger'
+  : 'https://app.inngest.com/env/production/functions';
 
 // Aggregate operation rows across models for bar chart display
 function aggregateByOperation(ops: OperationUsage[]) {
@@ -44,10 +64,19 @@ function aggregateAvgOutput(ops: OperationUsage[]) {
   }));
 }
 
-export default async function UsagePage() {
+export default async function UsagePage({ searchParams }: { searchParams: Promise<{ sort?: string }> }) {
+  const params = await searchParams;
+  const sortBy = params.sort === 'cost' ? 'cost' : 'date';
+
   let data;
+  let dailyChart: DailyOpCost[] = [];
+  let usageLog: UsageLogEntry[] = [];
   try {
-    data = await getUsageData();
+    [data, dailyChart, usageLog] = await Promise.all([
+      getUsageData(),
+      getDailyChartData(30),
+      getUsageLog(30),
+    ]);
   } catch {
     return (
       <div className="space-y-6">
@@ -229,14 +258,186 @@ export default async function UsagePage() {
         )}
       </div>
 
-      {/* Active model overrides — shows what's currently being tested */}
+      {/* Section 5: Daily Stacked Bar Chart */}
+      <DailyChart data={dailyChart} />
+
+      {/* Section 6: Operation Log */}
+      <OperationLog entries={usageLog} sortBy={sortBy} />
+    </div>
+  );
+}
+
+// --- Daily Stacked Bar Chart ---
+
+function DailyChart({ data }: { data: DailyOpCost[] }) {
+  if (data.length === 0) {
+    return (
       <div className="bg-white rounded-lg border border-gray-200 p-5">
-        <h2 className="text-sm font-medium text-gray-500 mb-2">Notas</h2>
-        <p className="text-xs text-gray-400">
-          Cambios y decisiones de optimizaci&oacute;n se registran en <code className="bg-gray-100 px-1 rounded">docs/optimization-log.md</code>.
-          Overrides de modelo activos se configuran en la tabla <code className="bg-gray-100 px-1 rounded">config</code> con clave <code className="bg-gray-100 px-1 rounded">model_override:&lt;operation&gt;</code>.
-        </p>
+        <h2 className="text-sm font-medium text-gray-500 mb-2">Costo diario por operaci&oacute;n</h2>
+        <p className="text-sm text-gray-400">Sin datos</p>
       </div>
+    );
+  }
+
+  // Group by date
+  const byDate = new Map<string, DailyOpCost[]>();
+  for (const d of data) {
+    const existing = byDate.get(d.date) ?? [];
+    existing.push(d);
+    byDate.set(d.date, existing);
+  }
+
+  const dates = Array.from(byDate.keys()).sort();
+  const maxDayCost = dates.reduce((max, date) => {
+    const total = (byDate.get(date) ?? []).reduce((s, d) => s + d.cost, 0);
+    return Math.max(max, total);
+  }, 0.01);
+
+  // Collect all operations for legend
+  const allOps = Array.from(new Set(data.map((d) => d.operation))).sort();
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-5">
+      <h2 className="text-sm font-medium text-gray-500 mb-4">Costo diario por operaci&oacute;n (30 d&iacute;as)</h2>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 mb-4">
+        {allOps.map((op) => (
+          <div key={op} className="flex items-center gap-1.5">
+            <div className={`w-2.5 h-2.5 rounded-sm ${OP_COLORS[op] ?? 'bg-gray-400'}`} />
+            <span className="text-xs text-gray-500 font-mono">{op}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Chart */}
+      <div className="flex items-end gap-px" style={{ height: '200px' }}>
+        {dates.map((date) => {
+          const ops = byDate.get(date) ?? [];
+          const dayTotal = ops.reduce((s, d) => s + d.cost, 0);
+          const barHeightPct = (dayTotal / maxDayCost) * 100;
+          const dayLabel = date.slice(5); // MM-DD
+
+          return (
+            <div key={date} className="flex-1 flex flex-col items-center min-w-0">
+              <div
+                className="w-full flex flex-col-reverse rounded-t-sm overflow-hidden"
+                style={{ height: `${barHeightPct}%`, minHeight: dayTotal > 0 ? '2px' : '0' }}
+                title={`${date}: $${dayTotal.toFixed(2)}`}
+              >
+                {ops
+                  .sort((a, b) => b.cost - a.cost)
+                  .map((op) => {
+                    const segPct = dayTotal > 0 ? (op.cost / dayTotal) * 100 : 0;
+                    return (
+                      <a
+                        key={op.operation}
+                        href={`#day-${date}`}
+                        className={`block ${OP_COLORS[op.operation] ?? 'bg-gray-400'} hover:opacity-80 transition-opacity`}
+                        style={{ height: `${segPct}%`, minHeight: segPct > 0 ? '1px' : '0' }}
+                        title={`${op.operation}: $${op.cost.toFixed(3)} (${op.calls} calls)`}
+                      />
+                    );
+                  })}
+              </div>
+              <span className="text-[9px] text-gray-400 mt-1 rotate-[-45deg] origin-top-left w-0 whitespace-nowrap">
+                {dayLabel}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex justify-between mt-6 text-[10px] text-gray-400 font-mono">
+        <span>${maxDayCost.toFixed(2)}/d&iacute;a m&aacute;x</span>
+        <span>{dates.length} d&iacute;as</span>
+      </div>
+    </div>
+  );
+}
+
+// --- Operation Log ---
+
+function OperationLog({ entries, sortBy }: { entries: UsageLogEntry[]; sortBy: 'date' | 'cost' }) {
+  // Group by day
+  const byDay = new Map<string, UsageLogEntry[]>();
+  for (const e of entries) {
+    const day = e.createdAt.toISOString().split('T')[0];
+    const existing = byDay.get(day) ?? [];
+    existing.push(e);
+    byDay.set(day, existing);
+  }
+
+  let days = Array.from(byDay.entries()).map(([date, ops]) => ({
+    date,
+    ops,
+    totalCost: ops.reduce((s, o) => s + o.cost, 0),
+  }));
+
+  if (sortBy === 'cost') {
+    days = days.sort((a, b) => b.totalCost - a.totalCost);
+  } else {
+    days = days.sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-5">
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="text-sm font-medium text-gray-500">Log de operaciones (30 d&iacute;as)</h2>
+        <div className="flex gap-2">
+          <Link
+            href="/dashboard/usage?sort=date"
+            className={`text-xs px-2 py-0.5 rounded-full border ${sortBy === 'date' ? 'bg-gray-800 text-white border-gray-800' : 'text-gray-500 border-gray-300 hover:border-gray-400'}`}
+          >
+            Por fecha
+          </Link>
+          <Link
+            href="/dashboard/usage?sort=cost"
+            className={`text-xs px-2 py-0.5 rounded-full border ${sortBy === 'cost' ? 'bg-gray-800 text-white border-gray-800' : 'text-gray-500 border-gray-300 hover:border-gray-400'}`}
+          >
+            Por costo
+          </Link>
+        </div>
+      </div>
+
+      {days.length === 0 ? (
+        <p className="text-sm text-gray-400">Sin datos</p>
+      ) : (
+        <div className="space-y-4">
+          {days.map(({ date, ops, totalCost }) => (
+            <div key={date} id={`day-${date}`}>
+              <div className="flex items-baseline justify-between mb-1.5 border-b border-gray-100 pb-1">
+                <h3 className="text-xs font-medium text-gray-700">{date}</h3>
+                <span className="text-xs font-mono text-gray-400">{ops.length} ops &middot; ${totalCost.toFixed(2)}</span>
+              </div>
+              <div className="space-y-0.5">
+                {ops.map((e) => {
+                  const modelShort = e.model.includes('opus') ? 'Opus' : 'Sonnet';
+                  const time = e.createdAt.toISOString().split('T')[1].slice(0, 8);
+                  const inngestUrl = e.runId ? `${INNGEST_BASE}/${e.runId}` : null;
+                  return (
+                    <div key={e.id} className="flex items-center gap-2 text-xs py-0.5">
+                      <span className="text-gray-400 font-mono w-16 shrink-0">{time}</span>
+                      <div className={`w-2 h-2 rounded-sm shrink-0 ${OP_COLORS[e.operation] ?? 'bg-gray-400'}`} />
+                      <span className="font-mono text-gray-700 w-36 shrink-0 truncate">{e.operation}</span>
+                      <span className="text-gray-400 w-12 shrink-0">{modelShort}</span>
+                      <span className="text-gray-400 w-16 text-right shrink-0">{formatTokens(e.inputTokens)}</span>
+                      <span className="text-gray-400 w-16 text-right shrink-0">{formatTokens(e.outputTokens)}</span>
+                      <span className="font-mono text-gray-700 w-14 text-right shrink-0">${e.cost.toFixed(3)}</span>
+                      {inngestUrl ? (
+                        <a href={inngestUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 shrink-0">
+                          inngest
+                        </a>
+                      ) : (
+                        <span className="text-gray-300 shrink-0">&mdash;</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

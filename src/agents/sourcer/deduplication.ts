@@ -4,7 +4,7 @@ import { markets } from '@/db/schema';
 import { eq, and, gt } from 'drizzle-orm';
 import type { GeneratedCandidate } from './types';
 
-function cosineSimilarity(a: number[], b: number[]): number {
+export function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
   let normA = 0;
   let normB = 0;
@@ -16,7 +16,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-async function getEmbeddings(client: OpenAI, texts: string[]): Promise<number[][]> {
+export async function getEmbeddings(client: OpenAI, texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
   const response = await client.embeddings.create({
     model: 'text-embedding-3-small',

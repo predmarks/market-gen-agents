@@ -56,6 +56,10 @@ async function resolveModel(operation: string | undefined, defaultModel: 'opus' 
   return MODELS[defaultModel];
 }
 
+// Run ID context — set from Inngest jobs, picked up by logUsage automatically
+let _currentRunId: string | undefined;
+export function setCurrentRunId(id: string | undefined) { _currentRunId = id; }
+
 interface CallClaudeOptions {
   system: string;
   userMessage: string;
@@ -73,7 +77,7 @@ interface CallClaudeResult<T> {
 
 async function logUsage(operation: string, model: string, inputTokens: number, outputTokens: number) {
   try {
-    await db.insert(llmUsage).values({ operation, model, inputTokens, outputTokens });
+    await db.insert(llmUsage).values({ operation, model, inputTokens, outputTokens, runId: _currentRunId ?? null });
   } catch (err) {
     console.warn('[llm-usage] Failed to log:', operation, err);
   }

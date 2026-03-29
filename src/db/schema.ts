@@ -123,6 +123,7 @@ export const topics = pgTable(
     lastGeneratedAt: timestamp('last_generated_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     feedback: jsonb('feedback').default([]).$type<{ text: string; createdAt: string }[]>(),
+    embedding: jsonb('embedding').$type<number[]>(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => [
@@ -200,6 +201,7 @@ export const llmUsage = pgTable(
     model: varchar('model', { length: 50 }).notNull(),
     inputTokens: integer('input_tokens').notNull(),
     outputTokens: integer('output_tokens').notNull(),
+    runId: varchar('run_id', { length: 100 }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [

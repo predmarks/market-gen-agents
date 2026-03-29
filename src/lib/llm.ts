@@ -72,12 +72,12 @@ interface CallClaudeOptions {
 
 interface CallClaudeResult<T> {
   result: T;
-  usage: { inputTokens: number; outputTokens: number };
+  usage: { inputTokens: number; outputTokens: number; cacheCreationTokens: number; cacheReadTokens: number };
 }
 
-async function logUsage(operation: string, model: string, inputTokens: number, outputTokens: number) {
+async function logUsage(operation: string, model: string, inputTokens: number, outputTokens: number, cacheCreationTokens = 0, cacheReadTokens = 0) {
   try {
-    await db.insert(llmUsage).values({ operation, model, inputTokens, outputTokens, runId: _currentRunId ?? null });
+    await db.insert(llmUsage).values({ operation, model, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, runId: _currentRunId ?? null });
   } catch (err) {
     console.warn('[llm-usage] Failed to log:', operation, err);
   }
@@ -120,10 +120,12 @@ export async function callClaude<T>(
   const usage = {
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,
+    cacheCreationTokens: response.usage.cache_creation_input_tokens ?? 0,
+    cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
   };
 
   if (options.operation) {
-    await logUsage(options.operation, model, usage.inputTokens, usage.outputTokens);
+    await logUsage(options.operation, model, usage.inputTokens, usage.outputTokens, usage.cacheCreationTokens, usage.cacheReadTokens);
   }
 
   return { result: toolBlock.input as T, usage };
@@ -165,10 +167,12 @@ export async function callClaudeWithSearch<T>(
   const usage = {
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,
+    cacheCreationTokens: response.usage.cache_creation_input_tokens ?? 0,
+    cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
   };
 
   if (options.operation) {
-    await logUsage(options.operation, model, usage.inputTokens, usage.outputTokens);
+    await logUsage(options.operation, model, usage.inputTokens, usage.outputTokens, usage.cacheCreationTokens, usage.cacheReadTokens);
   }
 
   return { result: toolBlock.input as T, usage };

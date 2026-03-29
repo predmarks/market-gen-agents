@@ -7,10 +7,15 @@ export const COST_PER_MTOK = {
   output: { 'claude-sonnet-4-20250514': 15, 'claude-opus-4-20250514': 75 } as Record<string, number>,
 } as const;
 
-export function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
+export function estimateCost(model: string, inputTokens: number, outputTokens: number, cacheCreationTokens = 0, cacheReadTokens = 0): number {
   const inputRate = COST_PER_MTOK.input[model] ?? 3;
   const outputRate = COST_PER_MTOK.output[model] ?? 15;
-  return (inputTokens * inputRate + outputTokens * outputRate) / 1_000_000;
+  return (
+    inputTokens * inputRate +
+    outputTokens * outputRate +
+    cacheCreationTokens * inputRate * 1.25 +
+    cacheReadTokens * inputRate * 0.1
+  ) / 1_000_000;
 }
 
 export function formatTokens(n: number): string {
@@ -25,6 +30,8 @@ export interface OperationUsage {
   calls: number;
   inputTokens: number;
   outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
   avgInput: number;
   avgOutput: number;
   cost: number;
@@ -60,6 +67,8 @@ export async function getUsageData(): Promise<UsageData> {
         calls: sql<number>`count(*)::int`,
         inputTokens: sql<number>`sum(${llmUsage.inputTokens})::int`,
         outputTokens: sql<number>`sum(${llmUsage.outputTokens})::int`,
+        cacheCreationTokens: sql<number>`coalesce(sum(${llmUsage.cacheCreationTokens}), 0)::int`,
+        cacheReadTokens: sql<number>`coalesce(sum(${llmUsage.cacheReadTokens}), 0)::int`,
         avgInput: sql<number>`avg(${llmUsage.inputTokens})::int`,
         avgOutput: sql<number>`avg(${llmUsage.outputTokens})::int`,
       })
@@ -73,6 +82,8 @@ export async function getUsageData(): Promise<UsageData> {
         calls: sql<number>`count(*)::int`,
         inputTokens: sql<number>`sum(${llmUsage.inputTokens})::int`,
         outputTokens: sql<number>`sum(${llmUsage.outputTokens})::int`,
+        cacheCreationTokens: sql<number>`coalesce(sum(${llmUsage.cacheCreationTokens}), 0)::int`,
+        cacheReadTokens: sql<number>`coalesce(sum(${llmUsage.cacheReadTokens}), 0)::int`,
       })
       .from(llmUsage)
       .where(gte(llmUsage.createdAt, fourteenDaysAgo))
@@ -84,6 +95,8 @@ export async function getUsageData(): Promise<UsageData> {
         calls: sql<number>`count(*)::int`,
         inputTokens: sql<number>`sum(${llmUsage.inputTokens})::int`,
         outputTokens: sql<number>`sum(${llmUsage.outputTokens})::int`,
+        cacheCreationTokens: sql<number>`coalesce(sum(${llmUsage.cacheCreationTokens}), 0)::int`,
+        cacheReadTokens: sql<number>`coalesce(sum(${llmUsage.cacheReadTokens}), 0)::int`,
         avgInput: sql<number>`avg(${llmUsage.inputTokens})::int`,
         avgOutput: sql<number>`avg(${llmUsage.outputTokens})::int`,
       })
@@ -104,9 +117,11 @@ export async function getUsageData(): Promise<UsageData> {
     calls: r.calls,
     inputTokens: r.inputTokens,
     outputTokens: r.outputTokens,
+    cacheCreationTokens: r.cacheCreationTokens,
+    cacheReadTokens: r.cacheReadTokens,
     avgInput: 'avgInput' in r ? (r as { avgInput: number }).avgInput : 0,
     avgOutput: 'avgOutput' in r ? (r as { avgOutput: number }).avgOutput : 0,
-    cost: estimateCost(r.model, r.inputTokens, r.outputTokens),
+    cost: estimateCost(r.model, r.inputTokens, r.outputTokens, r.cacheCreationTokens, r.cacheReadTokens),
   });
 
   const thisWeek = thisWeekRaw.map(toOpUsage);
@@ -134,6 +149,8 @@ export async function getUsageData(): Promise<UsageData> {
         calls: sql<number>`count(*)::int`,
         totalInput: sql<number>`coalesce(sum(${llmUsage.inputTokens}), 0)::int`,
         totalOutput: sql<number>`coalesce(sum(${llmUsage.outputTokens}), 0)::int`,
+        totalCacheCreation: sql<number>`coalesce(sum(${llmUsage.cacheCreationTokens}), 0)::int`,
+        totalCacheRead: sql<number>`coalesce(sum(${llmUsage.cacheReadTokens}), 0)::int`,
         models: sql<string>`string_agg(distinct ${llmUsage.model}, ',')`,
       })
       .from(llmUsage)
@@ -153,13 +170,18 @@ export async function getUsageData(): Promise<UsageData> {
       const avgOutputRate = models.length > 0
         ? models.reduce((s, model) => s + (COST_PER_MTOK.output[model] ?? 15), 0) / models.length
         : 15;
-      const cost = (usage.totalInput * avgInputRate + usage.totalOutput * avgOutputRate) / 1_000_000;
+      const cost = (
+        usage.totalInput * avgInputRate +
+        usage.totalOutput * avgOutputRate +
+        usage.totalCacheCreation * avgInputRate * 1.25 +
+        usage.totalCacheRead * avgInputRate * 0.1
+      ) / 1_000_000;
       costPerMarketList.push({ marketId: m.marketId, title: m.title, status: m.status, cost, calls: usage.calls });
     }
   }
 
   const thisWeekCost = thisWeek.reduce((s, r) => s + r.cost, 0);
-  const twoWeeksCost = twoWeeksRaw.reduce((s, r) => s + estimateCost(r.model, r.inputTokens, r.outputTokens), 0);
+  const twoWeeksCost = twoWeeksRaw.reduce((s, r) => s + estimateCost(r.model, r.inputTokens, r.outputTokens, r.cacheCreationTokens, r.cacheReadTokens), 0);
   const prevWeekCost = twoWeeksCost - thisWeekCost;
   const avgCostPerMarket = costPerMarketList.length > 0
     ? costPerMarketList.reduce((s, m) => s + m.cost, 0) / costPerMarketList.length
@@ -204,6 +226,8 @@ export async function getDailyChartData(days: number = 30): Promise<DailyOpCost[
       calls: sql<number>`count(*)::int`,
       inputTokens: sql<number>`sum(${llmUsage.inputTokens})::int`,
       outputTokens: sql<number>`sum(${llmUsage.outputTokens})::int`,
+      cacheCreationTokens: sql<number>`coalesce(sum(${llmUsage.cacheCreationTokens}), 0)::int`,
+      cacheReadTokens: sql<number>`coalesce(sum(${llmUsage.cacheReadTokens}), 0)::int`,
     })
     .from(llmUsage)
     .where(gte(llmUsage.createdAt, since))
@@ -215,7 +239,7 @@ export async function getDailyChartData(days: number = 30): Promise<DailyOpCost[
   for (const r of rows) {
     const key = `${r.date}:${r.operation}`;
     const existing = map.get(key);
-    const cost = estimateCost(r.model, r.inputTokens, r.outputTokens);
+    const cost = estimateCost(r.model, r.inputTokens, r.outputTokens, r.cacheCreationTokens, r.cacheReadTokens);
     if (existing) {
       existing.cost += cost;
       existing.calls += r.calls;
@@ -235,6 +259,8 @@ export async function getUsageLog(days: number = 30): Promise<UsageLogEntry[]> {
       model: llmUsage.model,
       inputTokens: llmUsage.inputTokens,
       outputTokens: llmUsage.outputTokens,
+      cacheCreationTokens: llmUsage.cacheCreationTokens,
+      cacheReadTokens: llmUsage.cacheReadTokens,
       runId: llmUsage.runId,
       createdAt: llmUsage.createdAt,
     })
@@ -245,6 +271,6 @@ export async function getUsageLog(days: number = 30): Promise<UsageLogEntry[]> {
 
   return rows.map((r) => ({
     ...r,
-    cost: estimateCost(r.model, r.inputTokens, r.outputTokens),
+    cost: estimateCost(r.model, r.inputTokens, r.outputTokens, r.cacheCreationTokens, r.cacheReadTokens),
   }));
 }

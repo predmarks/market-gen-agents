@@ -201,6 +201,8 @@ export const llmUsage = pgTable(
     model: varchar('model', { length: 50 }).notNull(),
     inputTokens: integer('input_tokens').notNull(),
     outputTokens: integer('output_tokens').notNull(),
+    cacheCreationTokens: integer('cache_creation_tokens').notNull().default(0),
+    cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
     runId: varchar('run_id', { length: 100 }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },

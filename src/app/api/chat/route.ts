@@ -15,6 +15,7 @@ import { getUserTimezone } from '@/lib/timezone';
 import { loadGenerationPrompt, saveGenerationPrompt } from '@/agents/sourcer/generator';
 import { loadResolutionPrompt, saveResolutionPrompt } from '@/agents/resolver/evaluator';
 import { syncDeployedMarkets } from '@/lib/sync-deployed';
+import { revalidatePath } from 'next/cache';
 
 const client = new Anthropic({ maxRetries: 5 });
 
@@ -789,6 +790,7 @@ async function executeTool(block: Anthropic.ToolUseBlock, contextType: ContextTy
     if (!updated) return 'Mercado no encontrado.';
     await logMarketEvent(marketId as string, 'human_edited', { detail: { fields: Object.keys(updates), source: 'chat' } });
     await logActivity('market_updated', { entityType: 'market', entityId: marketId as string, entityLabel: updated.title, detail: updates, source: 'chat' });
+    revalidatePath(`/dashboard/markets/${marketId}`);
     const confirmParts = Object.keys(updates).map((k) => {
       if (k === 'endTimestamp') return `cierre: ${new Date(Number(updates[k]) * 1000).toISOString()}`;
       return k;

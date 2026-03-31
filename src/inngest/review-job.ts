@@ -3,7 +3,6 @@ import { db } from '@/db/client';
 import { markets, marketEvents, globalFeedback, signals } from '@/db/schema';
 import { eq, and, asc, desc, gte, sql } from 'drizzle-orm';
 import type { ReviewResult, Iteration, MarketSnapshot } from '@/db/types';
-import { UNFIXABLE_HARD_RULES } from '@/config/rules';
 import { THRESHOLDS } from '@/config/scoring';
 import { verifyData } from '@/agents/reviewer/data-verifier';
 import { checkRules } from '@/agents/reviewer/rules-checker';
@@ -83,6 +82,20 @@ export const reviewJob = inngest.createFunction(
     concurrency: { limit: 1 },
     throttle: { limit: 1, period: '2m' },
     cancelOn: [{ event: 'market/review.cancel', if: 'async.data.id == event.data.id' }],
+    onFailure: async ({ event }) => {
+      const marketId = event.data.event.data.id as string;
+      await db
+        .update(markets)
+        .set({ status: 'candidate' })
+        .where(eq(markets.id, marketId));
+      await logActivity('review_failed', {
+        entityType: 'market',
+        entityId: marketId,
+        entityLabel: '',
+        detail: { error: (event.data as Record<string, unknown>).error },
+        source: 'pipeline',
+      });
+    },
   },
   { event: 'market/candidate.created' },
   async ({ event, step, runId }) => {
@@ -214,36 +227,6 @@ export const reviewJob = inngest.createFunction(
         return result;
       });
 
-      // Check for unfixable hard rule failures → immediate reject
-      const unfixableFail = rulesCheck.hardRuleResults.find(
-        (r) => !r.passed && (UNFIXABLE_HARD_RULES as readonly string[]).includes(r.ruleId),
-      );
-
-      if (unfixableFail) {
-        await step.run(`reject-unfixable-v${i}`, async () => {
-          const review: ReviewResult = {
-            scores: { ambiguity: 0, timingSafety: 0, timeliness: 0, volumePotential: 0, overallScore: 0 },
-            hardRuleResults: rulesCheck.hardRuleResults,
-            softRuleResults: rulesCheck.softRuleResults,
-            dataVerification: verification.claims,
-            resolutionSourceCheck: verification.resolutionSource,
-            recommendation: 'reject',
-            reviewedAt: new Date().toISOString(),
-          };
-          await db
-            .update(markets)
-            .set({ review, iterations, status: 'rejected' })
-            .where(eq(markets.id, marketId));
-
-          await logMarketEvent(marketId, 'pipeline_rejected', {
-            iteration: i,
-            detail: { reason: `Unfixable rule: ${unfixableFail.ruleId}` },
-          });
-        });
-        await logActivity('review_completed', { entityType: 'market', entityId: marketId, entityLabel: initResult.market.title, detail: { result: 'rejected', reason: `Unfixable rule: ${unfixableFail.ruleId}`, iteration: i, inngestRunUrl: runUrl }, source: 'pipeline' });
-        return { status: 'rejected', marketId, reason: `Unfixable rule: ${unfixableFail.ruleId}`, iteration: i };
-      }
-
       // Score — include related signal count for volume potential
       const scoring = await step.run(`score-v${i}`, async () => {
         // Count recent signals in the same category as a proxy for topic relevance
@@ -298,8 +281,7 @@ export const reviewJob = inngest.createFunction(
       const updatedIterations = [...iterations, iteration];
 
       // Check if good enough → reviewed (stays as candidate for human to promote)
-      const hasHardRuleFail = rulesCheck.hardRuleResults.some((r) => !r.passed);
-      const isPassing = scoring.scores.overallScore >= THRESHOLDS.passingScore && scoring.recommendation !== 'reject' && !hasHardRuleFail;
+      const isPassing = scoring.scores.overallScore >= THRESHOLDS.passingScore && scoring.recommendation !== 'reject';
 
       if (isPassing && (!feedback || effectivelyLastIteration)) {
         // No feedback to address, or last iteration — finish now
@@ -318,23 +300,23 @@ export const reviewJob = inngest.createFunction(
         return { status: 'candidate', marketId, iteration: i, score: scoring.scores.overallScore };
       }
 
-      // Last iteration (or plateaued) and still not good enough → reject
+      // Last iteration (or plateaued) — finish as candidate for human review
       if (effectivelyLastIteration) {
-        await step.run('reject-low-score', async () => {
+        await step.run(`finish-low-score-v${i}`, async () => {
           await db
             .update(markets)
-            .set({ review, iterations: updatedIterations, status: 'rejected' })
+            .set({ review, iterations: updatedIterations, status: 'candidate' })
             .where(eq(markets.id, marketId));
 
-          const rejectReason = isPlateaued ? 'Score plateaued — stopping early' : 'Below threshold after max iterations';
-          await logMarketEvent(marketId, 'pipeline_rejected', {
+          const reason = isPlateaued ? 'Score plateaued — stopping early' : 'Below threshold after max iterations';
+          await logMarketEvent(marketId, 'pipeline_opened', {
             iteration: i,
-            detail: { score: scoring.scores.overallScore, reason: rejectReason },
+            detail: { score: scoring.scores.overallScore, reason },
           });
         });
-        const rejectReason = isPlateaued ? 'Score plateaued — stopping early' : 'Below threshold after max iterations';
-        await logActivity('review_completed', { entityType: 'market', entityId: marketId, entityLabel: initResult.market.title, detail: { result: 'rejected', reason: rejectReason, score: scoring.scores.overallScore, inngestRunUrl: runUrl }, source: 'pipeline' });
-        return { status: 'rejected', marketId, reason: rejectReason, score: scoring.scores.overallScore };
+        const reason = isPlateaued ? 'Score plateaued — stopping early' : 'Below threshold after max iterations';
+        await logActivity('review_completed', { entityType: 'market', entityId: marketId, entityLabel: initResult.market.title, detail: { result: 'needs_review', reason, score: scoring.scores.overallScore, inngestRunUrl: runUrl }, source: 'pipeline' });
+        return { status: 'candidate', marketId, reason, score: scoring.scores.overallScore };
       }
 
       // Improve for next iteration

@@ -24,7 +24,6 @@ interface DeployableMarket {
 
 interface Props {
   marketId: string;
-  deployable: DeployableMarket;
 }
 
 type Step =
@@ -43,7 +42,7 @@ function Param({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function DeployMarketButton({ marketId, deployable }: Props) {
+export function DeployMarketButton({ marketId }: Props) {
   const router = useRouter();
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -55,6 +54,7 @@ export function DeployMarketButton({ marketId, deployable }: Props) {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [funding, setFunding] = useState('1000');
   const [overround, setOverround] = useState('500');
+  const [deployable, setDeployable] = useState<DeployableMarket | null>(null);
 
   const masterAddress = MASTER_ADDRESSES[chainId];
   const collateralToken = COLLATERAL_TOKENS[chainId];
@@ -72,6 +72,21 @@ export function DeployMarketButton({ marketId, deployable }: Props) {
 
   const decimals = tokenDecimals ?? 6;
 
+  async function fetchDeployable(): Promise<DeployableMarket> {
+    const res = await fetch(`/api/markets/${marketId}`);
+    if (!res.ok) throw new Error('Failed to fetch market');
+    const market = await res.json();
+    const d: DeployableMarket = {
+      name: market.title,
+      description: market.description,
+      category: market.category,
+      outcomes: market.outcomes,
+      endTimestamp: market.endTimestamp,
+    };
+    setDeployable(d);
+    return d;
+  }
+
   const logTx = (action: string, detail: Record<string, unknown>) =>
     fetch(`/api/markets/${marketId}/log`, {
       method: 'POST',
@@ -85,6 +100,8 @@ export function DeployMarketButton({ marketId, deployable }: Props) {
     setTxHash(null);
 
     try {
+      // Fetch fresh market data right before deploying
+      const fresh = await fetchDeployable();
       const fundingAmount = parseUnits(funding, decimals);
       const startTimestamp = BigInt(Math.floor(Date.now() / 1000) - 3600);
 
@@ -117,12 +134,12 @@ export function DeployMarketButton({ marketId, deployable }: Props) {
         abi: PRECOG_MASTER_ABI,
         functionName: 'createCustomMarket',
         args: [
-          deployable.name,
-          deployable.description,
-          deployable.category,
-          deployable.outcomes,
+          fresh.name,
+          fresh.description,
+          fresh.category,
+          fresh.outcomes,
           startTimestamp,
-          BigInt(deployable.endTimestamp),
+          BigInt(fresh.endTimestamp),
           address,
           parseUnits(funding, decimals),
           BigInt(overround),
@@ -190,7 +207,7 @@ export function DeployMarketButton({ marketId, deployable }: Props) {
   const busy = ['approving', 'confirming-approve', 'deploying', 'confirming-deploy', 'syncing'].includes(step);
   const basescanBase = getBasescanUrl(chainId);
 
-  if (step === 'preview') {
+  if (step === 'preview' && deployable) {
     return (
       <div className="rounded-md border border-gray-200 bg-white p-4 space-y-3 text-sm">
         <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Publicar mercado onchain</p>
@@ -244,7 +261,11 @@ export function DeployMarketButton({ marketId, deployable }: Props) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <button
-        onClick={() => step === 'idle' || step === 'error' ? setStep('preview') : undefined}
+        onClick={() => {
+          if (step === 'idle' || step === 'error') {
+            fetchDeployable().then(() => setStep('preview')).catch((e) => { setError(e.message); setStep('error'); });
+          }
+        }}
         disabled={busy || step === 'done'}
         className="px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 cursor-pointer"
       >

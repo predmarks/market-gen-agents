@@ -325,7 +325,16 @@ export default async function MarketDetailPage({ params }: Props) {
 
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
-          <h1 className="text-xl font-bold">{market.title}</h1>
+          {isEditable ? (
+            <EditableField
+              marketId={market.id}
+              field="title"
+              value={market.title}
+              className="text-xl font-bold"
+            />
+          ) : (
+            <h1 className="text-xl font-bold">{market.title}</h1>
+          )}
           <div className="flex items-center gap-2 shrink-0">
             {review?.recommendation && !(market.status === 'rejected' && review.recommendation === 'reject') && (
               <span
@@ -353,7 +362,7 @@ export default async function MarketDetailPage({ params }: Props) {
         {/* Deploy button for candidates without onchainId */}
         {market.status === 'candidate' && !market.onchainId && (
           <div className="mb-4">
-            <DeployMarketButton marketId={market.id} deployable={deployable} />
+            <DeployMarketButton marketId={market.id} />
           </div>
         )}
 

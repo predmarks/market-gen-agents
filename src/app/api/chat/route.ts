@@ -58,7 +58,7 @@ OPERACIONES BARATAS (ejecutar sin pedir confirmación):
 - Para feedback: guardalo con save_feedback. Si tiene valor general, extraé aprendizajes globales.
 
 OPERACIONES COSTOSAS (sugerir pero SIEMPRE pedir confirmación):
-- generate_markets, review_market, ingest_signals, research_topic, check_resolution, sync_deployed
+- create_market, review_market, ingest_signals, research_topic, check_resolution, sync_deployed
 - Sugerí estas acciones proactivamente cuando sea relevante, pero SIEMPRE preguntá "¿Querés que lance X?" antes de ejecutar.
 - NUNCA ejecutes estas herramientas sin confirmación explícita del usuario.
 
@@ -66,7 +66,7 @@ OPERACIONES COSTOSAS (sugerir pero SIEMPRE pedir confirmación):
 - Cuando discutas ideas o ángulos de mercado para un tema, guardá cada ángulo automáticamente usando add_angle. No esperes a que el usuario lo pida.
 - Guardar un ángulo NO crea un mercado. Es solo una idea guardada para referencia futura.
 - Los ángulos son preguntas concretas para mercados predictivos (binarios sí/no o multi-opción).
-- Discutir ángulos es brainstorming libre. Crear mercados (generate_markets) es un paso separado que requiere confirmación.
+- Discutir ángulos es brainstorming libre. Crear mercados (create_market) es un paso separado que requiere confirmación.
 
 FECHAS DE CIERRE:
 - El cierre de un mercado se guarda como endTimestamp (Unix timestamp en segundos).
@@ -486,17 +486,21 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
-    name: 'generate_markets',
-    description: 'Generate market candidates from topics. Runs in background.',
+    name: 'create_market',
+    description: 'Create a single market candidate linked to a topic. Use this when the user wants to suggest or create a specific market.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        topicIds: { type: 'array' as const, items: { type: 'string' as const }, description: 'Topic IDs to generate markets from' },
-        count: { type: 'number' as const, description: 'Number of markets to generate (default 5)' },
-        marketType: { type: 'string' as const, enum: ['binary', 'multi-outcome'], description: 'Force binary (Si/No) or multi-outcome (3-8 options) format. Omit to let the generator decide.' },
-        instruction: { type: 'string' as const, description: 'Specific angle or instruction for market generation (e.g. "mercado sobre la fecha de regreso"). Passed directly to the generator.' },
+        topicId: { type: 'string' as const, description: 'Topic ID to link the market to' },
+        title: { type: 'string' as const, description: 'Market question (in Spanish)' },
+        description: { type: 'string' as const, description: 'Market description with context' },
+        category: { type: 'string' as const, description: 'Category: Política, Economía, Sociedad, Deportes, Tecnología, Entretenimiento' },
+        outcomes: { type: 'array' as const, items: { type: 'string' as const }, description: 'Possible outcomes. Defaults to ["Sí", "No"]' },
+        closingDate: { type: 'string' as const, description: 'Closing date in ISO format (e.g. "2026-07-31"). Converted to endTimestamp.' },
+        resolutionCriteria: { type: 'string' as const, description: 'How the market resolves' },
+        resolutionSource: { type: 'string' as const, description: 'Source for resolution verification' },
       },
-      required: ['topicIds'],
+      required: ['topicId', 'title'],
     },
   },
   {
@@ -915,39 +919,52 @@ async function executeTool(block: Anthropic.ToolUseBlock, contextType: ContextTy
     return `Sync completado: ${result.created} creados, ${result.updated} actualizados, ${result.expanded} expandidos, ${result.resolved} resueltos onchain, ${result.topicLinked} temas vinculados.`;
   }
 
-  if (block.name === 'generate_markets') {
-    const { topicIds, count, marketType, instruction } = block.input as { topicIds: string[]; count?: number; marketType?: 'binary' | 'multi-outcome'; instruction?: string };
-    await inngest.send({
-      name: 'markets/generate.requested',
-      data: { topicIds, count: count ?? 5, marketType, instruction },
-    });
-    const topicRows = await db.select({ name: topics.name }).from(topics).where(inArray(topics.id, topicIds));
-    const topicNames = topicRows.map((t) => t.name);
-    // Log per-topic so each topic's detail page shows the event
-    for (const topicId of topicIds) {
-      const name = topicRows.find((t) => t.name)?.name;
-      await logActivity('generation_started', {
-        entityType: 'topic',
-        entityId: topicId,
-        entityLabel: topicNames.join(', '),
-        detail: { topicNames, marketType, instruction },
-        source: 'chat',
-      });
-    }
-    // Save instruction as a suggested angle on each topic
-    if (instruction) {
-      for (const topicId of topicIds) {
-        const [topic] = await db.select({ suggestedAngles: topics.suggestedAngles }).from(topics).where(eq(topics.id, topicId));
-        if (topic) {
-          const existing = topic.suggestedAngles ?? [];
-          if (!existing.includes(instruction)) {
-            await db.update(topics).set({ suggestedAngles: [...existing, instruction] }).where(eq(topics.id, topicId));
-          }
-        }
-      }
+  if (block.name === 'create_market') {
+    const input = block.input as {
+      topicId: string; title: string; description?: string; category?: string;
+      outcomes?: string[]; closingDate?: string; resolutionCriteria?: string; resolutionSource?: string;
+    };
+
+    // Validate topic
+    const [topic] = await db.select({ id: topics.id, name: topics.name, slug: topics.slug, category: topics.category }).from(topics).where(eq(topics.id, input.topicId));
+    if (!topic) return `Tema "${input.topicId}" no encontrado.`;
+
+    // Convert closing date to timestamp
+    let endTimestamp = 0;
+    if (input.closingDate) {
+      const dateStr = input.closingDate.includes('T') ? input.closingDate : `${input.closingDate}T23:00:00-03:00`;
+      endTimestamp = Math.floor(new Date(dateStr).getTime() / 1000);
     }
 
-    return `Generación de ${count ?? 5} mercados ${marketType === 'multi-outcome' ? 'multi-opción' : marketType === 'binary' ? 'binarios' : ''} iniciada desde ${topicIds.length} tema(s).${instruction ? ` Instrucción: "${instruction}"` : ''}`;
+    const sourceContext: SourceContext = {
+      originType: 'manual',
+      generatedAt: new Date().toISOString(),
+      topicIds: [topic.id],
+      topicNames: [topic.name],
+    };
+
+    const [created] = await db.insert(markets).values({
+      title: input.title,
+      description: input.description ?? '',
+      category: input.category ?? topic.category,
+      outcomes: input.outcomes ?? ['Sí', 'No'],
+      endTimestamp: endTimestamp || 0,
+      ...(input.closingDate ? { expectedResolutionDate: input.closingDate.split('T')[0] } : {}),
+      resolutionCriteria: input.resolutionCriteria ?? '',
+      resolutionSource: input.resolutionSource ?? '',
+      status: 'candidate',
+      sourceContext,
+    }).returning({ id: markets.id });
+
+    await logActivity('market_created', {
+      entityType: 'market',
+      entityId: created.id,
+      entityLabel: input.title,
+      detail: { topicId: topic.id, topicName: topic.name },
+      source: 'chat',
+    });
+
+    return `Mercado creado: "${input.title}" (candidato). [Ver mercado](/dashboard/markets/${created.id})`;
   }
 
   if (block.name === 'review_market') {

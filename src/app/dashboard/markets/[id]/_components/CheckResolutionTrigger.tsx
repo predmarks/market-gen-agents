@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface Props {
@@ -10,11 +10,6 @@ interface Props {
 export function CheckResolutionTrigger({ marketId }: Props) {
   const router = useRouter();
   const [status, setStatus] = useState<'idle' | 'loading' | 'triggered' | 'error'>('idle');
-
-  // Auto-trigger on mount
-  useEffect(() => {
-    trigger();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function trigger() {
     setStatus('loading');

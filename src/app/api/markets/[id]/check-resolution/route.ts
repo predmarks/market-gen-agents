@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/client';
-import { markets } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { markets, activityLog } from '@/db/schema';
+import { eq, and, gt } from 'drizzle-orm';
 import { inngest } from '@/inngest/client';
 import { logActivity } from '@/lib/activity-log';
 
@@ -22,6 +22,23 @@ export async function POST(
       { error: `Cannot check resolution for status "${market.status}". Must be one of: ${checkable.join(', ')}.` },
       { status: 400 },
     );
+  }
+
+  // Dedup: skip if already triggered in the last 10 minutes
+  const [recent] = await db
+    .select({ id: activityLog.id })
+    .from(activityLog)
+    .where(
+      and(
+        eq(activityLog.action, 'resolution_check_started'),
+        eq(activityLog.entityId, id),
+        gt(activityLog.createdAt, new Date(Date.now() - 10 * 60 * 1000)),
+      ),
+    )
+    .limit(1);
+
+  if (recent) {
+    return NextResponse.json({ ok: true, skipped: true });
   }
 
   try {

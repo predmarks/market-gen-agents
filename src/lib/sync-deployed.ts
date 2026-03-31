@@ -403,35 +403,19 @@ export async function syncDeployedMarkets(chainId: number = MAINNET_CHAIN_ID): P
         })),
       );
 
-      const inngestEvents: { name: 'topics/suggest.requested'; data: { description: string; marketId: string } }[] = [];
-
       for (const m of needsTopic) {
         const match = topicMatches.get(m.id);
+        if (!match) continue;
+
         const ctx = (m.sourceContext as SourceContext) ?? { originType: 'manual' as const, generatedAt: new Date().toISOString() };
-
-        if (match) {
-          await db.update(markets).set({
-            sourceContext: {
-              ...ctx,
-              topicIds: [...(ctx.topicIds ?? []), match.topicId],
-              topicNames: [...(ctx.topicNames ?? []), match.topicName],
-            },
-          }).where(eq(markets.id, m.id));
-          topicLinked++;
-        } else {
-          inngestEvents.push({
-            name: 'topics/suggest.requested',
-            data: {
-              description: `${m.title}. ${m.description.slice(0, 300)}`,
-              marketId: m.id,
-            },
-          });
-          topicResearchDispatched++;
-        }
-      }
-
-      if (inngestEvents.length > 0) {
-        await inngest.send(inngestEvents);
+        await db.update(markets).set({
+          sourceContext: {
+            ...ctx,
+            topicIds: [...(ctx.topicIds ?? []), match.topicId],
+            topicNames: [...(ctx.topicNames ?? []), match.topicName],
+          },
+        }).where(eq(markets.id, m.id));
+        topicLinked++;
       }
     }
   }

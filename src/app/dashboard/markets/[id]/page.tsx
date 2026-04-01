@@ -17,6 +17,7 @@ import { MarketActions } from './_components/MarketActions';
 
 import { CopyJsonButton } from './_components/CopyJsonButton';
 import { CheckResolutionTrigger } from './_components/CheckResolutionTrigger';
+import { SuggestResolutionButton } from './_components/SuggestResolutionButton';
 import { DeployMarketButton } from './_components/DeployMarketButton';
 import { OnchainActionsWrapper as OnchainActions } from './_components/OnchainActionsWrapper';
 import { ResolveOnchainButton } from './_components/ResolveOnchainButton';
@@ -189,23 +190,14 @@ export default async function MarketDetailPage({ params }: Props) {
 
       {/* Auto-trigger resolution check when market is in_resolution but no suggestion yet */}
       {market.status === 'in_resolution' && (!resolution || !resolution.suggestedOutcome) && (
-        <CheckResolutionTrigger marketId={market.id} />
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-6">
+          <CheckResolutionTrigger marketId={market.id} checkingAt={resolution?.checkingAt} />
+          <SuggestResolutionButton marketId={market.id} outcomes={(market.outcomes as string[]) ?? ['Si', 'No']} />
+        </div>
       )}
 
-      {/* Resolution check in progress indicator */}
-      {resolution?.checkingAt && !resolution.suggestedOutcome && (() => {
-        const stale = Date.now() - new Date(resolution.checkingAt!).getTime() > 10 * 60 * 1000;
-        if (stale) return null;
-        return (
-          <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 flex items-center gap-3">
-            <span className="block w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            <span className="text-sm text-blue-700">Verificación de resolución en curso...</span>
-          </div>
-        );
-      })()}
-
       {/* Resolution — unified stepper */}
-      {resolution && (() => {
+      {resolution?.suggestedOutcome && (() => {
         const hasReporter = !!REPORTER_ADDRESSES_PUBLIC[market.chainId];
         const reporterDone = activity.some((a) => a.action === 'market_reported_onchain');
         const step1 = !!resolution.suggestedOutcome;
@@ -265,7 +257,7 @@ export default async function MarketDetailPage({ params }: Props) {
             {/* Outcome + confidence */}
             <div className="flex items-center gap-3 mb-2">
               <span className="text-lg font-bold">
-                {resolution.suggestedOutcome ?? market.outcome}
+                {resolution.suggestedOutcome || market.outcome || 'Sin resultado'}
               </span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
                 resolution.confidence === 'high' ? 'bg-green-100 text-green-700' :
@@ -551,6 +543,8 @@ export default async function MarketDetailPage({ params }: Props) {
               <span>{market.category}</span>
               <span className="mx-2">&middot;</span>
               <TimingSafetyIndicator safety={market.timingSafety as Market['timingSafety']} />
+              <span className="mx-2">&middot;</span>
+              <span className="text-xs text-gray-400">Creado {new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: tz }).format(market.createdAt)}</span>
             </Section>
 
             <Section title="Descripción">

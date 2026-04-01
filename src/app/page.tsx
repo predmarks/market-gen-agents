@@ -15,7 +15,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     .from(markets)
     .where(
       and(
-        inArray(markets.status, ['open', 'in_resolution', 'closed']),
+        inArray(markets.status, ['open', 'in_resolution']),
         eq(markets.isArchived, false),
         eq(markets.chainId, chainId),
       ),

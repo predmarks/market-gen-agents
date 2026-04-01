@@ -258,6 +258,18 @@ async function loadMarketsSummary(): Promise<string> {
   return `\nTODOS LOS MERCADOS (${allMarkets.length}):\n${lines.join('\n')}`;
 }
 
+async function loadSignalsSummary(): Promise<string> {
+  const allSignals = await db
+    .select({ id: signals.id, type: signals.type, text: signals.text, source: signals.source, category: signals.category, score: signals.score, publishedAt: signals.publishedAt })
+    .from(signals)
+    .orderBy(desc(signals.publishedAt))
+    .limit(100);
+
+  if (allSignals.length === 0) return '';
+  const lines = allSignals.map((s) => `- [${s.id}] ${s.type} | ${s.text.slice(0, 120)} | ${s.source} | ${s.category} | score:${s.score} | ${s.publishedAt?.toISOString().split('T')[0] ?? ''}`);
+  return `\nSEÑALES RECIENTES (${allSignals.length}):\n${lines.join('\n')}`;
+}
+
 // --- Claude tools ---
 
 const TOOLS: Anthropic.Tool[] = [
@@ -1141,6 +1153,7 @@ export async function POST(request: NextRequest) {
   const contextType: ContextType = body.contextType ?? 'global';
   const contextId: string | null = body.contextId ?? null;
   const conversationId: string | undefined = body.conversationId;
+  const pageContext: { label: string; content: string } | null = body.pageContext ?? null;
 
   console.log(`[chat POST] contextType=${contextType} contextId=${contextId} conversationId=${conversationId}`);
 
@@ -1170,14 +1183,19 @@ export async function POST(request: NextRequest) {
   const { hard: hardRules, soft: softRules } = await loadRules();
   const rulesContext = `\nREGLAS DE MERCADOS:\nEstrictas:\n${hardRules.map((r) => `- ${r.id}: ${r.description}\n  Check: ${r.check}`).join('\n')}\n\nAdvertencias:\n${softRules.map((r) => `- ${r.id}: ${r.description}\n  Check: ${r.check}`).join('\n')}`;
 
-  // Load all topics and markets for global awareness
-  const [topicsSummary, marketsSummary, chatPrompt] = await Promise.all([
+  // Load all topics, markets, and signals for global awareness
+  const [topicsSummary, marketsSummary, signalsSummary, chatPrompt] = await Promise.all([
     loadTopicsSummary(),
     loadMarketsSummary(),
+    loadSignalsSummary(),
     loadChatPrompt(),
   ]);
 
-  const systemMessage = `${chatPrompt}\n\n${entityContext}${topicsSummary}${marketsSummary}${rulesContext}${globalContext}`;
+  const pageContextBlock = pageContext
+    ? `\nCONTENIDO VISIBLE EN LA PÁGINA (${pageContext.label}):\n${pageContext.content}\n`
+    : '';
+
+  const systemMessage = `${chatPrompt}\n\n${entityContext}${pageContextBlock}${topicsSummary}${marketsSummary}${signalsSummary}${rulesContext}${globalContext}`;
 
   // Multi-turn tool loop — continues until Claude stops calling tools
   let apiMessages: Anthropic.MessageParam[] = messages.map((m) => ({ role: m.role, content: m.content }));

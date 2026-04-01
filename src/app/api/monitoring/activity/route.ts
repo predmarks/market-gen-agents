@@ -26,6 +26,7 @@ interface MarketMonitorEntry {
   endTimestamp: number;
   resolution: { suggestedOutcome?: string; confidence?: string } | null;
   outcome: string | null;
+  pendingBalance: string | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -144,8 +145,12 @@ export async function GET(request: NextRequest) {
       participants: m.participants,
       endTimestamp: m.endTimestamp,
       outcome: m.outcome,
-      resolution: resolution?.suggestedOutcome
-        ? { suggestedOutcome: resolution.suggestedOutcome, confidence: resolution.confidence }
+      pendingBalance: m.pendingBalance,
+      resolution: resolution?.suggestedOutcome || resolution?.checkingAt
+        ? { suggestedOutcome: resolution?.suggestedOutcome, confidence: resolution?.confidence, checkingAt: resolution?.checkingAt }
+        : null,
+      withdrawal: resolution?.withdrawal
+        ? { withdrawnAt: resolution.withdrawal.withdrawnAt, ownershipTransferredAt: resolution.withdrawal.ownershipTransferredAt }
         : null,
     };
   });

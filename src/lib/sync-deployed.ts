@@ -1,9 +1,9 @@
 import { db } from '@/db/client';
 import { markets } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNotNull, sql } from 'drizzle-orm';
 import { fetchOnchainMarkets } from './indexer';
 import { expandMarket } from './expand-market';
-import { fetchOnchainMarketData } from './onchain';
+import { fetchOnchainMarketData, fetchPendingBalances } from './onchain';
 import { matchMarketsToTopics } from './match-market-topic';
 import { inngest } from '@/inngest/client';
 import { logActivity } from '@/lib/activity-log';
@@ -116,6 +116,32 @@ export async function syncMarketStats(chainId: number = MAINNET_CHAIN_ID): Promi
           sourceContext,
         });
         created++;
+      }
+    }
+  }
+
+  // Fetch balances for all onchain markets (liquidity display)
+  const marketsWithAddress = await db
+    .select({ id: markets.id, onchainAddress: markets.onchainAddress })
+    .from(markets)
+    .where(
+      and(
+        eq(markets.chainId, chainId),
+        isNotNull(markets.onchainAddress),
+      ),
+    );
+
+  if (marketsWithAddress.length > 0) {
+    const addresses = marketsWithAddress.map((m) => m.onchainAddress as `0x${string}`);
+    const balances = await fetchPendingBalances(addresses, chainId);
+
+    for (const m of marketsWithAddress) {
+      const balance = balances.get(m.onchainAddress!.toLowerCase());
+      if (balance !== undefined) {
+        await db
+          .update(markets)
+          .set({ pendingBalance: balance.toString() })
+          .where(eq(markets.id, m.id));
       }
     }
   }

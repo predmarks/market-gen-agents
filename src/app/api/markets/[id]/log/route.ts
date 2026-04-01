@@ -10,6 +10,9 @@ const ALLOWED_ACTIONS = [
   'market_updated_onchain',
   'market_resolved_onchain',
   'market_reported_onchain',
+  'market_ownership_transferred',
+  'market_liquidity_withdrawn',
+  'market_ownership_returned',
 ];
 
 export async function POST(
@@ -57,6 +60,55 @@ export async function POST(
     const { reporterPending: _, ...cleanResolution } = resolution;
     await db.update(markets).set({
       resolution: cleanResolution as unknown as Resolution,
+    }).where(eq(markets.id, id));
+  }
+
+  // Withdrawal flow state persistence
+  if (action === 'market_ownership_transferred') {
+    const resolution = (market.resolution as Record<string, unknown> | null) ?? {};
+    const withdrawal = (resolution.withdrawal as Record<string, unknown> | null) ?? {};
+    await db.update(markets).set({
+      resolution: {
+        ...resolution,
+        withdrawal: {
+          ...withdrawal,
+          ownershipTransferredAt: new Date().toISOString(),
+          ownershipTransferTxHash: detail?.txHash,
+          tokenAddress: detail?.tokenAddress,
+        },
+      } as unknown as Resolution,
+    }).where(eq(markets.id, id));
+  }
+
+  if (action === 'market_liquidity_withdrawn') {
+    const resolution = (market.resolution as Record<string, unknown> | null) ?? {};
+    const withdrawal = (resolution.withdrawal as Record<string, unknown> | null) ?? {};
+    await db.update(markets).set({
+      resolution: {
+        ...resolution,
+        withdrawal: {
+          ...withdrawal,
+          withdrawnAt: new Date().toISOString(),
+          withdrawTxHash: detail?.txHash,
+        },
+      } as unknown as Resolution,
+    }).where(eq(markets.id, id));
+  }
+
+  if (action === 'market_ownership_returned') {
+    const resolution = (market.resolution as Record<string, unknown> | null) ?? {};
+    const withdrawal = (resolution.withdrawal as Record<string, unknown> | null) ?? {};
+    await db.update(markets).set({
+      resolution: {
+        ...resolution,
+        withdrawal: {
+          ...withdrawal,
+          ownershipReturnedAt: new Date().toISOString(),
+          ownershipReturnTxHash: detail?.txHash,
+          ownershipTransferredAt: undefined,
+          ownershipTransferTxHash: undefined,
+        },
+      } as unknown as Resolution,
     }).where(eq(markets.id, id));
   }
 

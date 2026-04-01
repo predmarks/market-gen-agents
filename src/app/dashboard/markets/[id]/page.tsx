@@ -20,6 +20,7 @@ import { CheckResolutionTrigger } from './_components/CheckResolutionTrigger';
 import { DeployMarketButton } from './_components/DeployMarketButton';
 import { OnchainActionsWrapper as OnchainActions } from './_components/OnchainActionsWrapper';
 import { ResolveOnchainButton } from './_components/ResolveOnchainButton';
+import { WithdrawLiquidityButton } from './_components/WithdrawLiquidityButton';
 import { Markdown } from '../../../_components/Markdown';
 
 import { ActivityCard } from '@/app/_components/ActivityCard';
@@ -191,6 +192,18 @@ export default async function MarketDetailPage({ params }: Props) {
         <CheckResolutionTrigger marketId={market.id} />
       )}
 
+      {/* Resolution check in progress indicator */}
+      {resolution?.checkingAt && !resolution.suggestedOutcome && (() => {
+        const stale = Date.now() - new Date(resolution.checkingAt!).getTime() > 10 * 60 * 1000;
+        if (stale) return null;
+        return (
+          <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 flex items-center gap-3">
+            <span className="block w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+            <span className="text-sm text-blue-700">Verificación de resolución en curso...</span>
+          </div>
+        );
+      })()}
+
       {/* Resolution — unified stepper */}
       {resolution && (() => {
         const hasReporter = !!REPORTER_ADDRESSES_PUBLIC[market.chainId];
@@ -319,6 +332,68 @@ export default async function MarketDetailPage({ params }: Props) {
                 />
               </div>
             )}
+          </div>
+        );
+      })()}
+
+      {/* Withdrawal — stepper for closed markets */}
+      {market.status === 'closed' && market.onchainId && market.onchainAddress && market.onchainAddress !== '0x0000000000000000000000000000000000000000' && (() => {
+        const withdrawal = (resolution as Record<string, unknown> | undefined)?.withdrawal as import('@/db/types').WithdrawalProgress | undefined;
+        const wStep1 = !!withdrawal?.ownershipTransferredAt;
+        const wStep2 = !!withdrawal?.withdrawnAt;
+        const transferTxHash = withdrawal?.ownershipTransferTxHash;
+        const withdrawTxHash = withdrawal?.withdrawTxHash;
+        const basescanBase = getBasescanUrl(market.chainId);
+
+        const steps = [
+          { label: 'Transferir ownership', done: wStep1, txHash: transferTxHash },
+          { label: 'Retirar liquidez', done: wStep2, txHash: withdrawTxHash },
+        ];
+
+        const allDone = steps.every((s) => s.done);
+        const borderColor = allDone ? 'border-green-200' : 'border-purple-200';
+        const bgColor = allDone ? 'bg-green-50' : 'bg-purple-50';
+
+        return (
+          <div className={`mb-6 rounded-lg border p-6 ${bgColor} ${borderColor}`}>
+            <div className="flex items-center gap-1 mb-4">
+              {steps.map((s, i) => (
+                <div key={s.label} className="flex items-center gap-1">
+                  {i > 0 && <div className={`w-4 h-px ${s.done ? 'bg-green-300' : 'bg-gray-300'}`} />}
+                  <div className="flex items-center gap-1.5">
+                    <span className={`flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold ${
+                      s.done ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
+                    }`}>
+                      {s.done ? '\u2713' : i + 1}
+                    </span>
+                    {s.txHash ? (
+                      <a
+                        href={`${basescanBase}/tx/${s.txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`text-[10px] font-medium hover:underline ${s.done ? 'text-green-700' : 'text-gray-500'}`}
+                      >
+                        {s.label}
+                      </a>
+                    ) : (
+                      <span className={`text-[10px] font-medium ${s.done ? 'text-green-700' : 'text-gray-500'}`}>
+                        {s.label}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Retiro de liquidez</h3>
+
+            <WithdrawLiquidityButton
+              marketId={market.id}
+              onchainId={Number(market.onchainId)}
+              marketAddress={market.onchainAddress as `0x${string}`}
+              chainId={market.chainId}
+              withdrawal={withdrawal ?? null}
+            />
           </div>
         );
       })()}

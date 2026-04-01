@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
+import { usePageContext } from '@/app/_components/PageContext';
 
 interface TopicData {
   id: string;
@@ -15,8 +16,11 @@ interface TopicData {
   signalCount: number;
   lastSignalAt: string | null;
   lastGeneratedAt: string | null;
+  updatedAt: string;
   marketCount?: number;
 }
+
+const RESEARCH_STALE_MS = 10 * 60 * 1000; // 10 minutes
 
 function formatDate(dateStr: string): string {
   return new Intl.DateTimeFormat('es-AR', {
@@ -115,6 +119,15 @@ export default function TopicsPage() {
     });
   }
 
+  async function cancelResearch(topicId: string, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await fetch(`/api/topics/${topicId}/cancel-research`, { method: 'POST' });
+      fetchTopics();
+    } catch { /* ignore */ }
+  }
+
   const selectableTopics = topics.filter((t) => t.status !== 'researching');
 
   function toggleSelectAll() {
@@ -198,6 +211,14 @@ export default function TopicsPage() {
       const bTime = b.lastSignalAt ? new Date(b.lastSignalAt).getTime() : 0;
       return bTime - aTime;
     });
+
+  // Push visible data to MiniChat context
+  const { setPageData } = usePageContext();
+  const pageContent = useMemo(() => filteredTopics.map((t, i) => `${i + 1}. [${t.id}] ${t.name} | ${t.category} | score:${t.score} | ${t.signalCount} señales | ${t.status}`).join('\n'), [filteredTopics]);
+  useEffect(() => {
+    setPageData({ label: `Temas (${filteredTopics.length})`, content: pageContent });
+    return () => setPageData(null);
+  }, [pageContent, filteredTopics.length, setPageData]);
 
   const categoryCounts = CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
     acc[cat] = topics.filter((t) => t.category === cat && t.status !== 'researching').length;
@@ -393,6 +414,14 @@ export default function TopicsPage() {
                 >
                   {isResearching ? 'investigando...' : isRegular ? 'recurrente' : isStale ? 'inactivo' : 'activo'}
                 </span>
+                {isResearching && t.updatedAt && Date.now() - new Date(t.updatedAt).getTime() > RESEARCH_STALE_MS && (
+                  <button
+                    onClick={(e) => cancelResearch(t.id, e)}
+                    className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-100 hover:bg-red-200 text-red-600 shrink-0 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                )}
                 <span className={`text-sm truncate flex-1 min-w-0 ${isResearching ? 'text-gray-500' : 'font-medium text-gray-800'}`}>{t.name}</span>
                 {hasNewInfo && !isResearching && (
                   <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 shrink-0">

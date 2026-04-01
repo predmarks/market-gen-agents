@@ -15,7 +15,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     .from(markets)
     .where(
       and(
-        inArray(markets.status, ['open', 'in_resolution']),
+        inArray(markets.status, ['open', 'in_resolution', 'closed']),
         eq(markets.isArchived, false),
         eq(markets.chainId, chainId),
       ),
@@ -31,7 +31,9 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     onchainId: m.onchainId,
     volume: m.volume,
     participants: m.participants,
-    resolution: m.resolution as { suggestedOutcome?: string; confidence?: string; flaggedAt?: string; evidenceUrls?: string[] } | null,
+    resolution: m.resolution as { suggestedOutcome?: string; confidence?: string; flaggedAt?: string; evidenceUrls?: string[]; checkingAt?: string } | null,
+    pendingBalance: m.pendingBalance,
+    outcome: m.outcome,
   }));
 
   return (

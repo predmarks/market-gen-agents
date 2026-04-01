@@ -42,6 +42,26 @@ export const PRECOG_MASTER_ABI = [
   },
   // Write
   {
+    name: 'marketTransferOwnership',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'marketId', type: 'uint256' },
+      { name: 'newOwner', type: 'address' },
+    ],
+    outputs: [],
+  },
+  {
+    name: 'marketWithdraw',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'marketId', type: 'uint256' },
+      { name: 'marketToken', type: 'address' },
+    ],
+    outputs: [],
+  },
+  {
     name: 'updateMarket',
     type: 'function',
     stateMutability: 'nonpayable',
@@ -150,6 +170,34 @@ export const PRECOG_MARKET_ABI = [
     stateMutability: 'view',
     inputs: [],
     outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    name: 'owner',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    name: 'closeTimestamp',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    name: 'token',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    name: 'withdraw',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'tokenAddress', type: 'address' }],
+    outputs: [],
   },
 ] as const;
 

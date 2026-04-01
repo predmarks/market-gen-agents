@@ -74,6 +74,7 @@ export const resolutionJob = inngest.createFunction(
           confidence: 'high',
           suggestedOutcome: randomOutcome,
           flaggedAt: new Date().toISOString(),
+          checkingAt: undefined,
         };
         await db.update(markets).set({ resolution }).where(eq(markets.id, marketId));
         await logActivity('resolution_flagged', {
@@ -152,6 +153,13 @@ export const resolutionJob = inngest.createFunction(
 
     if (check.status === 'unresolved') {
       await step.run('log-unresolved', async () => {
+        // Clear checkingAt flag
+        const existing = market.resolution as Record<string, unknown> | null;
+        if (existing?.checkingAt) {
+          const { checkingAt: _, ...rest } = existing;
+          await db.update(markets).set({ resolution: rest as unknown as Resolution }).where(eq(markets.id, marketId));
+        }
+
         await logActivity('resolution_check_unresolved', {
           entityType: 'market',
           entityId: marketId,
@@ -178,6 +186,7 @@ export const resolutionJob = inngest.createFunction(
         confidence: check.confidence,
         suggestedOutcome: check.suggestedOutcome ?? '',
         flaggedAt: existing?.flaggedAt ?? new Date().toISOString(),
+        checkingAt: undefined,
       };
 
       await db

@@ -44,6 +44,7 @@ export const markets = pgTable(
     onchainAddress: varchar('onchain_address', { length: 42 }),
     volume: varchar('volume', { length: 40 }),
     participants: integer('participants'),
+    pendingBalance: varchar('pending_balance', { length: 40 }),
     chainId: integer('chain_id').notNull().default(8453),
   },
   (table) => [
@@ -144,7 +145,7 @@ export const topicSignals = pgTable(
   (table) => [
     index('topic_signals_topic_idx').on(table.topicId),
   ],
-);
+).enableRLS();
 
 export const conversations = pgTable(
   'conversations',

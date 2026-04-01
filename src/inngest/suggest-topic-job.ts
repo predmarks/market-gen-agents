@@ -79,7 +79,25 @@ IMPORTANTE:
 - Todo en español argentino`;
 
 export const suggestTopicJob = inngest.createFunction(
-  { id: 'suggest-topic', retries: 8, concurrency: { limit: 1 }, throttle: { limit: 1, period: '1m' } },
+  {
+    id: 'suggest-topic',
+    retries: 8,
+    concurrency: { limit: 1 },
+    throttle: { limit: 1, period: '1m' },
+    onFailure: async ({ event }) => {
+      const topicId = event.data.event.data.topicId as string | undefined;
+      if (topicId) {
+        await db.update(topicsTable).set({ status: 'active' }).where(eq(topicsTable.id, topicId));
+        await logActivity('research_failed', {
+          entityType: 'topic',
+          entityId: topicId,
+          entityLabel: '',
+          detail: { error: (event.data as Record<string, unknown>).error },
+          source: 'pipeline',
+        });
+      }
+    },
+  },
   { event: 'topics/suggest.requested' },
   async ({ event, step, runId }) => {
     const runUrl = inngestRunUrl('suggest-topic', runId);

@@ -1,6 +1,6 @@
 import { db } from '@/db/client';
 import { llmUsage, markets, marketEvents } from '@/db/schema';
-import { sql, gte, eq, and, desc, asc } from 'drizzle-orm';
+import { sql, gte, lte, eq, and, desc, asc, inArray } from 'drizzle-orm';
 
 export const COST_PER_MTOK = {
   input: { 'claude-sonnet-4-20250514': 3, 'claude-opus-4-20250514': 15 } as Record<string, number>,
@@ -127,43 +127,43 @@ export async function getUsageData(): Promise<UsageData> {
   const thisWeek = thisWeekRaw.map(toOpUsage);
   const month = monthRaw.map(toOpUsage);
 
-  // Cost per market attribution
+  // Cost per market attribution — single query instead of N+1
+  const marketIds = recentMarkets.map((m) => m.marketId);
   const costPerMarketList: MarketCost[] = [];
-  for (const m of recentMarkets) {
-    const [lastEvent] = await db
-      .select({ createdAt: marketEvents.createdAt })
-      .from(marketEvents)
-      .where(
-        and(
-          eq(marketEvents.marketId, m.marketId),
-          sql`${marketEvents.type} IN ('pipeline_opened', 'pipeline_rejected')`,
-        ),
-      )
-      .orderBy(desc(marketEvents.createdAt))
-      .limit(1);
-
-    if (!lastEvent) continue;
-
-    const [usage] = await db
+  if (marketIds.length > 0) {
+    const marketUsageRows = await db
       .select({
-        calls: sql<number>`count(*)::int`,
+        marketId: markets.id,
+        calls: sql<number>`count(${llmUsage.id})::int`,
         totalInput: sql<number>`coalesce(sum(${llmUsage.inputTokens}), 0)::int`,
         totalOutput: sql<number>`coalesce(sum(${llmUsage.outputTokens}), 0)::int`,
         totalCacheCreation: sql<number>`coalesce(sum(${llmUsage.cacheCreationTokens}), 0)::int`,
         totalCacheRead: sql<number>`coalesce(sum(${llmUsage.cacheReadTokens}), 0)::int`,
         models: sql<string>`string_agg(distinct ${llmUsage.model}, ',')`,
       })
-      .from(llmUsage)
-      .where(
+      .from(markets)
+      .innerJoin(
+        marketEvents,
         and(
-          gte(llmUsage.createdAt, m.createdAt),
-          sql`${llmUsage.createdAt} <= ${lastEvent.createdAt}`,
-          sql`${llmUsage.operation} IN ('data_verify', 'rules_check', 'score_market', 'improve_market')`,
+          eq(marketEvents.marketId, markets.id),
+          inArray(marketEvents.type, ['pipeline_opened', 'pipeline_rejected']),
         ),
-      );
+      )
+      .innerJoin(
+        llmUsage,
+        and(
+          gte(llmUsage.createdAt, markets.createdAt),
+          lte(llmUsage.createdAt, marketEvents.createdAt),
+          inArray(llmUsage.operation, ['data_verify', 'rules_check', 'score_market', 'improve_market']),
+        ),
+      )
+      .where(inArray(markets.id, marketIds))
+      .groupBy(markets.id);
 
-    if (usage && usage.calls > 0) {
-      const models = (usage.models ?? '').split(',').filter(Boolean);
+    for (const row of marketUsageRows) {
+      const m = recentMarkets.find((r) => r.marketId === row.marketId);
+      if (!m || row.calls === 0) continue;
+      const models = (row.models ?? '').split(',').filter(Boolean);
       const avgInputRate = models.length > 0
         ? models.reduce((s, model) => s + (COST_PER_MTOK.input[model] ?? 3), 0) / models.length
         : 3;
@@ -171,12 +171,12 @@ export async function getUsageData(): Promise<UsageData> {
         ? models.reduce((s, model) => s + (COST_PER_MTOK.output[model] ?? 15), 0) / models.length
         : 15;
       const cost = (
-        usage.totalInput * avgInputRate +
-        usage.totalOutput * avgOutputRate +
-        usage.totalCacheCreation * avgInputRate * 1.25 +
-        usage.totalCacheRead * avgInputRate * 0.1
+        row.totalInput * avgInputRate +
+        row.totalOutput * avgOutputRate +
+        row.totalCacheCreation * avgInputRate * 1.25 +
+        row.totalCacheRead * avgInputRate * 0.1
       ) / 1_000_000;
-      costPerMarketList.push({ marketId: m.marketId, title: m.title, status: m.status, cost, calls: usage.calls });
+      costPerMarketList.push({ marketId: m.marketId, title: m.title, status: m.status, cost, calls: row.calls });
     }
   }
 

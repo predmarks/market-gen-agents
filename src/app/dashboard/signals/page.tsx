@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { usePageContext } from '@/app/_components/PageContext';
 import { SourcingTrigger, SourcingLog, useSourcingData } from '../monitoring/_components/SourcingPanel';
 
 interface SignalData {
@@ -91,6 +92,14 @@ export default function SignalsPage() {
     if (typeFilter && s.type !== typeFilter) return false;
     return true;
   });
+
+  // Push visible data to MiniChat context
+  const { setPageData } = usePageContext();
+  const pageContent = useMemo(() => filteredSignals.map((s, i) => `${i + 1}. [${s.id}] ${s.type} | ${s.text.slice(0, 120)} | ${s.source} | ${s.category}`).join('\n'), [filteredSignals]);
+  useEffect(() => {
+    setPageData({ label: `Señales (${filteredSignals.length})`, content: pageContent });
+    return () => setPageData(null);
+  }, [pageContent, filteredSignals.length, setPageData]);
 
   return (
     <div className="space-y-6">

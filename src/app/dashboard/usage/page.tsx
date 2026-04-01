@@ -90,7 +90,8 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
       getDailyChartData(30),
       getUsageLog(30),
     ]);
-  } catch {
+  } catch (err) {
+    console.error('[usage] Failed to load usage data:', err);
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Uso de LLM</h1>

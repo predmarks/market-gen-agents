@@ -1,5 +1,7 @@
-import { createPublicClient, http, parseAbi } from 'viem';
+import { createPublicClient, http, parseAbi, erc20Abi } from 'viem';
+import { base, baseSepolia } from 'viem/chains';
 import { MAINNET_CHAIN_ID } from './chains';
+import { COLLATERAL_TOKENS } from './contracts';
 
 const PRECOG_MASTER_ABI = parseAbi([
   'function markets(uint256 marketId) view returns (string name, string description, string category, string outcomes, uint256 startTimestamp, uint256 endTimestamp, address creator, address market)',
@@ -20,7 +22,8 @@ function getClient(chainId: number) {
   const envKey = chainId === MAINNET_CHAIN_ID ? 'PREDMARKS_RPC_URL' : 'PREDMARKS_RPC_URL_SEPOLIA';
   const rpcUrl = process.env[envKey];
   if (!rpcUrl) throw new Error(`${envKey} is not set`);
-  return createPublicClient({ transport: http(rpcUrl) });
+  const chain = chainId === MAINNET_CHAIN_ID ? base : baseSepolia;
+  return createPublicClient({ chain, transport: http(rpcUrl) });
 }
 
 function getMasterAddress(chainId: number): `0x${string}` {
@@ -94,4 +97,36 @@ export async function fetchOnchainMarketDataBatch(onchainIds: number[], chainId:
   }
 
   return results;
+}
+
+export async function fetchPendingBalances(
+  marketAddresses: `0x${string}`[],
+  chainId: number = MAINNET_CHAIN_ID,
+): Promise<Map<string, bigint>> {
+  const balances = new Map<string, bigint>();
+  const collateralToken = COLLATERAL_TOKENS[chainId];
+  if (!collateralToken || marketAddresses.length === 0) return balances;
+
+  try {
+    const client = getClient(chainId);
+    const results = await client.multicall({
+      contracts: marketAddresses.map((addr) => ({
+        address: collateralToken,
+        abi: erc20Abi,
+        functionName: 'balanceOf' as const,
+        args: [addr],
+      })),
+    });
+
+    for (let i = 0; i < marketAddresses.length; i++) {
+      const result = results[i];
+      if (result.status === 'success') {
+        balances.set(marketAddresses[i].toLowerCase(), result.result as bigint);
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch pending balances:', err);
+  }
+
+  return balances;
 }

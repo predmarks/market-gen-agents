@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import { ActivityCard } from './ActivityCard';
 import type { ActivityEntry } from './ActivityCard';
+import { usePageContext } from './PageContext';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -78,6 +79,7 @@ function PersistedActivityCards({ activityIds }: { activityIds: string[] }) {
 export function MiniChat() {
   const pathname = usePathname();
   const router = useRouter();
+  const { pageData } = usePageContext();
   const [open, setOpen] = useState(false);
   const [context, setContext] = useState<ChatContext>(() => detectContext(pathname));
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -316,6 +318,7 @@ export function MiniChat() {
           contextType: context.type,
           contextId: effectiveId,
           conversationId: activeConvId,
+          ...(pageData ? { pageContext: pageData } : {}),
         }),
         signal: AbortSignal.timeout(300_000), // 5 min for multi-turn
       });

@@ -96,6 +96,16 @@ export interface Iteration {
   changes?: Record<string, { from: unknown; to: unknown }>;
 }
 
+export interface WithdrawalProgress {
+  ownershipTransferredAt?: string;
+  ownershipTransferTxHash?: string;
+  withdrawnAt?: string;
+  withdrawTxHash?: string;
+  tokenAddress?: string;
+  ownershipReturnedAt?: string;
+  ownershipReturnTxHash?: string;
+}
+
 export interface Resolution {
   evidence: string;
   evidenceUrls: string[];
@@ -104,6 +114,10 @@ export interface Resolution {
   flaggedAt: string;
   confirmedBy?: string;
   confirmedAt?: string;
+  resolvedOnchainAt?: string;
+  reporterPending?: boolean;
+  withdrawal?: WithdrawalProgress;
+  checkingAt?: string;
 }
 
 export interface Market {

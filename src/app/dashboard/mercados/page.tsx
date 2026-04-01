@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { validateChainId, MAINNET_CHAIN_ID } from '@/lib/chains';
+import { usePageContext } from '@/app/_components/PageContext';
 
 interface MarketEntry {
   id: string;
@@ -16,8 +17,10 @@ interface MarketEntry {
   volume: string | null;
   participants: number | null;
   endTimestamp: number;
-  resolution: { suggestedOutcome?: string; confidence?: string } | null;
+  resolution: { suggestedOutcome?: string; confidence?: string; checkingAt?: string } | null;
   outcome: string | null;
+  withdrawal: { withdrawnAt?: string; ownershipTransferredAt?: string } | null;
+  pendingBalance: string | null;
 }
 
 function formatTimeInfo(status: string, endTimestamp: number): string | null {
@@ -179,6 +182,14 @@ export default function MercadosPage() {
     if (sortBy === 'participants') return ((b.participants ?? 0) - (a.participants ?? 0)) * dir;
     return (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) * dir;
   });
+
+  // Push visible data to MiniChat context
+  const { setPageData } = usePageContext();
+  const pageContent = useMemo(() => filtered.map((m, i) => `${i + 1}. [${m.id}] ${m.title} | ${m.status} | ${m.category}${m.score ? ` | score:${m.score}` : ''}`).join('\n'), [filtered]);
+  useEffect(() => {
+    setPageData({ label: `Mercados — ${activeFilter.label} (${filtered.length})`, content: pageContent });
+    return () => setPageData(null);
+  }, [pageContent, activeFilter.label, filtered.length, setPageData]);
 
   // Selection — all non-archived markets are selectable
   const selectableMarkets = filtered.filter((m) => !ARCHIVED_STATUSES.includes(m.status));
@@ -384,6 +395,20 @@ export default function MercadosPage() {
                   }`}>
                     → {m.resolution.suggestedOutcome}
                   </span>
+                ) : null}
+                {m.resolution?.checkingAt && Date.now() - new Date(m.resolution.checkingAt).getTime() < 10 * 60 * 1000 && (
+                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-600 animate-pulse">Verificando...</span>
+                )}
+                {m.status === 'closed' ? (
+                  m.withdrawal?.withdrawnAt ? (
+                    <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">Liquidez retirada</span>
+                  ) : m.withdrawal?.ownershipTransferredAt ? (
+                    <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 animate-pulse">Retiro en progreso</span>
+                  ) : m.pendingBalance && parseFloat(m.pendingBalance) > 0 ? (
+                    <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-600">Liquidez pendiente ${formatVolume(m.pendingBalance)}</span>
+                  ) : null
+                ) : m.pendingBalance && parseFloat(m.pendingBalance) > 0 ? (
+                  <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-600">Liquidez ${formatVolume(m.pendingBalance)}</span>
                 ) : null}
                 <span className="hidden md:inline text-xs text-gray-400 shrink-0">{m.category}</span>
                 {m.volume && (

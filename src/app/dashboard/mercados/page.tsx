@@ -166,12 +166,12 @@ export default function MercadosPage() {
 
   // Apply filter
   const activeFilter = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
-  let baseFiltered = activeFilter.statuses
+  const statusFiltered = activeFilter.statuses
     ? markets.filter((m) => activeFilter.statuses!.includes(m.status))
     : markets.filter((m) => !ARCHIVED_STATUSES.includes(m.status));
-  if (showPendingOnly) {
-    baseFiltered = baseFiltered.filter((m) => m.pendingBalance && parseFloat(m.pendingBalance) > 0);
-  }
+  const baseFiltered = showPendingOnly
+    ? statusFiltered.filter((m) => m.pendingBalance && parseFloat(m.pendingBalance) > 0)
+    : statusFiltered;
 
   // Sort — selected sort takes precedence; 'status' groups by status priority
   const dir = sortAsc ? 1 : -1;
@@ -299,7 +299,7 @@ export default function MercadosPage() {
             );
           })}
           {(() => {
-            const totalPending = markets.reduce((sum, m) => {
+            const totalPending = statusFiltered.reduce((sum, m) => {
               if (m.pendingBalance && parseFloat(m.pendingBalance) > 0) {
                 return sum + parseFloat(m.pendingBalance);
               }

@@ -60,24 +60,26 @@ export function Nav() {
   }
 
   return (
-    <nav className="bg-white border-b border-gray-200 px-4 md:px-6 py-3 overflow-x-auto">
-      <div className="flex items-center gap-4 md:gap-6 min-w-max">
-        <Link href={withChain('/')} className="text-lg font-bold text-gray-900">
-          Predmarks
-        </Link>
-        {Number(searchParams.get('chain')) === TESTNET_CHAIN_ID && (
-          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">Testnet</span>
-        )}
+    <nav className="bg-white border-b border-gray-200 px-4 md:px-6 py-3">
+      <div className="flex items-center gap-4 md:gap-6">
+        <div className="flex items-center gap-4 md:gap-6 overflow-x-auto min-w-0 flex-1">
+          <Link href={withChain('/')} className="text-lg font-bold text-gray-900 shrink-0">
+            Predmarks
+          </Link>
+          {Number(searchParams.get('chain')) === TESTNET_CHAIN_ID && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 shrink-0">Testnet</span>
+          )}
 
-        {navLink('/dashboard/topics', 'Temas')}
-        {navLink('/dashboard/mercados', 'Mercados')}
-        {navLink('/dashboard/signals', 'Señales')}
-        {navLink('/dashboard/rules', 'Reglas')}
-        {navLink('/dashboard/activity', 'Log')}
-        {navLink('/dashboard/analytics', 'Analytics')}
-        {navLink('/dashboard/usage', 'Uso')}
+          {navLink('/dashboard/topics', 'Temas')}
+          {navLink('/dashboard/mercados', 'Mercados')}
+          {navLink('/dashboard/signals', 'Señales')}
+          {navLink('/dashboard/rules', 'Reglas')}
+          {navLink('/dashboard/activity', 'Log')}
+          {navLink('/dashboard/analytics', 'Analytics')}
+          {navLink('/dashboard/usage', 'Uso')}
+        </div>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0">
           <WalletButton />
           <form action={logout}>
             <button

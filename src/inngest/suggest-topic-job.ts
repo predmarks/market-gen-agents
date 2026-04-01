@@ -10,6 +10,7 @@ import type { Topic, SourceSignal } from '@/agents/sourcer/types';
 import type { MarketCategory } from '@/db/types';
 import { logActivity, inngestRunUrl } from '@/lib/activity-log';
 import { setCurrentRunId } from '@/lib/llm';
+import { getRunCost } from '@/lib/usage';
 
 const RESEARCH_SCHEMA = {
   type: 'object' as const,
@@ -407,6 +408,7 @@ export const suggestTopicJob = inngest.createFunction(
 
     // Step 4: Log completion
     await step.run('log-completion', async () => {
+      const costUsd = await getRunCost(`suggest-topic/${runId}`);
       await logActivity('topic_research_completed', {
         entityType: 'topic',
         entityId: result.topicId ?? undefined,
@@ -419,6 +421,7 @@ export const suggestTopicJob = inngest.createFunction(
           signals: result.signals,
           ...(marketId ? { linkedMarketId: marketId } : {}),
           inngestRunUrl: runUrl,
+          costUsd,
         },
         source: 'pipeline',
       });

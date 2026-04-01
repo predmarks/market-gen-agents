@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { validateChainId, MAINNET_CHAIN_ID } from '@/lib/chains';
 import { usePageContext } from '@/app/_components/PageContext';
+import { SearchInput } from '@/app/dashboard/_components/SearchInput';
 
 interface MarketEntry {
   id: string;
@@ -116,6 +117,7 @@ export default function MercadosPage() {
   const [showPendingOnly, setShowPendingOnly] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ created: number; updated: number } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchAll = useCallback(async () => {
     try {
@@ -172,10 +174,16 @@ export default function MercadosPage() {
   const baseFiltered = showPendingOnly
     ? statusFiltered.filter((m) => m.pendingBalance && parseFloat(m.pendingBalance) > 0)
     : statusFiltered;
+  const searchFiltered = searchQuery
+    ? baseFiltered.filter((m) => {
+        const q = searchQuery.toLowerCase();
+        return m.title.toLowerCase().includes(q) || m.category.toLowerCase().includes(q);
+      })
+    : baseFiltered;
 
   // Sort — selected sort takes precedence; 'status' groups by status priority
   const dir = sortAsc ? 1 : -1;
-  const filtered = [...baseFiltered].sort((a, b) => {
+  const filtered = [...searchFiltered].sort((a, b) => {
     if (sortBy === 'status') {
       const statusDiff = (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
       if (statusDiff !== 0) return statusDiff * dir;
@@ -321,6 +329,8 @@ export default function MercadosPage() {
           })()}
         </div>
       )}
+
+      <SearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por título o categoría..." />
 
       {/* Sort controls */}
       {markets.length > 0 && (

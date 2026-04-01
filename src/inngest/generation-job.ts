@@ -7,6 +7,7 @@ import { deduplicateCandidates } from '@/agents/sourcer/deduplication';
 import type { Topic } from '@/agents/sourcer/types';
 import { logActivity, inngestRunUrl } from '@/lib/activity-log';
 import { setCurrentRunId } from '@/lib/llm';
+import { getRunCost } from '@/lib/usage';
 import { validateMarket } from '@/lib/validate-market';
 
 export const generationJob = inngest.createFunction(
@@ -166,6 +167,7 @@ export const generationJob = inngest.createFunction(
     });
 
     // Log a summary entry for the global activity view
+    const costUsd = await getRunCost(`generation-pipeline/${runId}`);
     await logActivity('generation_completed', {
       entityType: 'system',
       detail: {
@@ -174,6 +176,7 @@ export const generationJob = inngest.createFunction(
         topicNames: topicsForGeneration.map((t) => t.name),
         duplicatesRemoved: candidates.length - unique.length,
         inngestRunUrl: runUrl,
+        costUsd,
       },
       source: 'pipeline',
     });

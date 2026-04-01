@@ -5,6 +5,7 @@ import { eq, desc, isNotNull } from 'drizzle-orm';
 import { evaluateResolution } from '@/agents/resolver/evaluator';
 import { logActivity, inngestRunUrl } from '@/lib/activity-log';
 import { setCurrentRunId } from '@/lib/llm';
+import { getRunCost } from '@/lib/usage';
 import type { Resolution } from '@/db/types';
 
 function extractUrls(text: string): string[] {
@@ -160,6 +161,7 @@ export const resolutionJob = inngest.createFunction(
           await db.update(markets).set({ resolution: rest as unknown as Resolution }).where(eq(markets.id, marketId));
         }
 
+        const costUsd = await getRunCost(`resolution-check/${runId}`);
         await logActivity('resolution_check_unresolved', {
           entityType: 'market',
           entityId: marketId,
@@ -170,6 +172,7 @@ export const resolutionJob = inngest.createFunction(
             evidence: check.evidence,
             evidenceUrls: check.evidenceUrls,
             inngestRunUrl: runUrl,
+            costUsd,
           },
           source: 'pipeline',
         });
@@ -200,6 +203,7 @@ export const resolutionJob = inngest.createFunction(
           ? 'resolution_flagged'
           : 'resolution_unclear';
 
+      const costUsd = await getRunCost(`resolution-check/${runId}`);
       await logActivity(action, {
         entityType: 'market',
         entityId: marketId,
@@ -213,6 +217,7 @@ export const resolutionJob = inngest.createFunction(
           isEmergency: check.isEmergency,
           emergencyReason: check.emergencyReason,
           inngestRunUrl: runUrl,
+          costUsd,
         },
         source: 'pipeline',
       });

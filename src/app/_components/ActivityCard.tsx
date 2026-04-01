@@ -472,9 +472,15 @@ export function ActivityCard({ entry, defaultExpanded = false, compact = false }
         {hasDetail && <span className="text-[10px] text-gray-300 ml-auto shrink-0">{expanded ? '▲' : '▼'}</span>}
       </div>
 
-      {/* Row 2: Timestamp + used by + inngest link + activity log link */}
+      {/* Row 2: Timestamp + cost + used by + inngest link + activity log link */}
       <p className="text-[10px] text-gray-400">
-        {formatTime(entry.createdAt)} · Usado por: {usedBy}
+        {formatTime(entry.createdAt)}
+        {typeof entry.detail?.costUsd === 'number' && entry.detail.costUsd > 0 && (
+          <span className="text-amber-600 font-medium">
+            {' · '}${entry.detail.costUsd < 0.01 ? '< 0.01' : (entry.detail.costUsd as number).toFixed(2)}
+          </span>
+        )}
+        {' · '}Usado por: {usedBy}
         {typeof entry.detail?.inngestRunUrl === 'string' && (
           <span>
             {' · '}

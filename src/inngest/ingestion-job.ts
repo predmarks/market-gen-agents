@@ -11,6 +11,7 @@ import type { Topic } from '@/agents/sourcer/types';
 import type { TopicUpdate } from '@/agents/sourcer/topic-extractor';
 import { logActivity, inngestRunUrl } from '@/lib/activity-log';
 import { setCurrentRunId } from '@/lib/llm';
+import { getRunCost } from '@/lib/usage';
 
 const TOPIC_DEDUP_THRESHOLD = 0.80;
 
@@ -335,6 +336,7 @@ export const ingestionJob = inngest.createFunction(
         : [];
 
       const topicNames = freshTopicDetails.map((t) => t.name);
+      const costUsd = await getRunCost(`ingestion-pipeline/${inngestId}`);
       await logActivity('ingestion_completed', {
         entityType: 'system',
         entityLabel: topicNames.length > 0
@@ -347,6 +349,7 @@ export const ingestionJob = inngest.createFunction(
           signals: ingestionResult.signals.map((s) => ({ source: s.source, text: s.text.slice(0, 150), url: s.url ?? null })),
           topics: freshTopicDetails.map((t) => ({ id: t.id, name: t.name, slug: t.slug })),
           inngestRunUrl: runUrl,
+          costUsd,
         },
         source: 'pipeline',
       });

@@ -11,6 +11,7 @@ import { improveMarket } from '@/agents/reviewer/improver';
 import { logMarketEvent } from '@/lib/market-events';
 import { logActivity, inngestRunUrl } from '@/lib/activity-log';
 import { setCurrentRunId } from '@/lib/llm';
+import { getRunCost } from '@/lib/usage';
 import { validateMarket } from '@/lib/validate-market';
 import type { MarketRecord } from '@/agents/reviewer/types';
 
@@ -296,7 +297,8 @@ export const reviewJob = inngest.createFunction(
             detail: { score: scoring.scores.overallScore },
           });
         });
-        await logActivity('review_completed', { entityType: 'market', entityId: marketId, entityLabel: initResult.market.title, detail: { result: 'opened', score: scoring.scores.overallScore, iteration: i, inngestRunUrl: runUrl }, source: 'pipeline' });
+        const costUsd = await getRunCost(`review-pipeline/${runId}`);
+        await logActivity('review_completed', { entityType: 'market', entityId: marketId, entityLabel: initResult.market.title, detail: { result: 'opened', score: scoring.scores.overallScore, iteration: i, inngestRunUrl: runUrl, costUsd }, source: 'pipeline' });
         return { status: 'candidate', marketId, iteration: i, score: scoring.scores.overallScore };
       }
 
@@ -315,7 +317,8 @@ export const reviewJob = inngest.createFunction(
           });
         });
         const reason = isPlateaued ? 'Score plateaued — stopping early' : 'Below threshold after max iterations';
-        await logActivity('review_completed', { entityType: 'market', entityId: marketId, entityLabel: initResult.market.title, detail: { result: 'needs_review', reason, score: scoring.scores.overallScore, inngestRunUrl: runUrl }, source: 'pipeline' });
+        const costUsd = await getRunCost(`review-pipeline/${runId}`);
+        await logActivity('review_completed', { entityType: 'market', entityId: marketId, entityLabel: initResult.market.title, detail: { result: 'needs_review', reason, score: scoring.scores.overallScore, inngestRunUrl: runUrl, costUsd }, source: 'pipeline' });
         return { status: 'candidate', marketId, reason, score: scoring.scores.overallScore };
       }
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { usePageContext } from '@/app/_components/PageContext';
+import { SearchInput } from '@/app/dashboard/_components/SearchInput';
 
 interface TopicData {
   id: string;
@@ -190,6 +191,7 @@ export default function TopicsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [marketFilter, setMarketFilter] = useState<'all' | 'with' | 'without'>('all');
   const [sortBy, setSortBy] = useState<'score' | 'recency' | 'signals' | 'markets'>('score');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const CATEGORIES = ['Política', 'Economía', 'Deportes', 'Entretenimiento', 'Clima', 'Otros'];
 
@@ -198,6 +200,10 @@ export default function TopicsPage() {
       if (categoryFilter && t.category !== categoryFilter && t.status !== 'researching') return false;
       if (marketFilter === 'with' && !(t.marketCount && t.marketCount > 0)) return false;
       if (marketFilter === 'without' && t.marketCount && t.marketCount > 0) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        if (!t.name.toLowerCase().includes(q) && !t.summary.toLowerCase().includes(q)) return false;
+      }
       return true;
     })
     .sort((a, b) => {
@@ -281,6 +287,8 @@ export default function TopicsPage() {
           })}
         </div>
       )}
+
+      <SearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre o resumen..." />
 
       {/* Sort controls */}
       {topics.length > 0 && (

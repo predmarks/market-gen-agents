@@ -196,6 +196,26 @@ export async function getUsageData(): Promise<UsageData> {
   };
 }
 
+/** Sum LLM cost for all operations within a pipeline run */
+export async function getRunCost(runId: string): Promise<number> {
+  const rows = await db
+    .select({
+      model: llmUsage.model,
+      inputTokens: sql<number>`coalesce(sum(${llmUsage.inputTokens}), 0)::int`,
+      outputTokens: sql<number>`coalesce(sum(${llmUsage.outputTokens}), 0)::int`,
+      cacheCreationTokens: sql<number>`coalesce(sum(${llmUsage.cacheCreationTokens}), 0)::int`,
+      cacheReadTokens: sql<number>`coalesce(sum(${llmUsage.cacheReadTokens}), 0)::int`,
+    })
+    .from(llmUsage)
+    .where(eq(llmUsage.runId, runId))
+    .groupBy(llmUsage.model);
+
+  return rows.reduce(
+    (total, r) => total + estimateCost(r.model, r.inputTokens, r.outputTokens, r.cacheCreationTokens, r.cacheReadTokens),
+    0,
+  );
+}
+
 // --- Daily chart + operation log ---
 
 export interface DailyOpCost {

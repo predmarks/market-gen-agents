@@ -54,7 +54,6 @@ export function MarketList({ markets, chainId }: { markets: MarketEntry[]; chain
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [verifyingIds, setVerifyingIds] = useState<Set<string>>(new Set());
-  const [showPendingOnly, setShowPendingOnly] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ created: number; updated: number } | null>(null);
   const prevMarketsRef = useRef(markets);
@@ -99,12 +98,9 @@ export function MarketList({ markets, chainId }: { markets: MarketEntry[]; chain
     } catch { /* ignore */ }
   }
 
-  let filtered = query
+  const filtered = query
     ? markets.filter((m) => m.title.toLowerCase().includes(query.toLowerCase()))
     : markets;
-  if (showPendingOnly) {
-    filtered = filtered.filter((m) => m.pendingBalance && parseFloat(m.pendingBalance) > 0);
-  }
 
   const live = filtered.filter((m) => LIVE_STATUSES.includes(m.status)).sort((a, b) => a.endTimestamp - b.endTimestamp);
   const inResolution = filtered.filter((m) => m.status === 'in_resolution');
@@ -128,16 +124,6 @@ export function MarketList({ markets, chainId }: { markets: MarketEntry[]; chain
               {syncResult.updated > 0 && `${syncResult.updated} actualizados`}
             </span>
           )}
-          <button
-            onClick={() => setShowPendingOnly((v) => !v)}
-            className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors cursor-pointer ${
-              showPendingOnly
-                ? 'bg-amber-100 border-amber-300 text-amber-700'
-                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
-            }`}
-          >
-            Con liquidez pendiente
-          </button>
         </div>
         <input
           type="text"

@@ -113,6 +113,7 @@ export default function MercadosPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [showPendingOnly, setShowPendingOnly] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ created: number; updated: number } | null>(null);
 
@@ -165,9 +166,12 @@ export default function MercadosPage() {
 
   // Apply filter
   const activeFilter = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
-  const baseFiltered = activeFilter.statuses
+  let baseFiltered = activeFilter.statuses
     ? markets.filter((m) => activeFilter.statuses!.includes(m.status))
     : markets.filter((m) => !ARCHIVED_STATUSES.includes(m.status));
+  if (showPendingOnly) {
+    baseFiltered = baseFiltered.filter((m) => m.pendingBalance && parseFloat(m.pendingBalance) > 0);
+  }
 
   // Sort — selected sort takes precedence; 'status' groups by status priority
   const dir = sortAsc ? 1 : -1;
@@ -294,6 +298,16 @@ export default function MercadosPage() {
               </button>
             );
           })}
+          <button
+            onClick={() => setShowPendingOnly((v) => !v)}
+            className={`px-3 py-1 text-xs rounded-full border transition-colors cursor-pointer ${
+              showPendingOnly
+                ? 'bg-amber-100 border-amber-300 text-amber-700'
+                : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+            }`}
+          >
+            Con liquidez pendiente
+          </button>
         </div>
       )}
 

@@ -35,6 +35,7 @@ CONTINGENCIAS (incluir las que apliquen):
 - Revisión de datos → primera publicación.
 - Deportes: tiempo reglamentario + reprogramación/cancelación → "No".
 - Clima: referenciar timeanddate.com.
+- Los mercados NUNCA se anulan. Siempre deben resolverse a uno de los outcomes definidos. Diseñar contingencias que cubran todos los escenarios sin recurrir a anulación.
 
 REGLAS DE VALIDACIÓN:
 {rules}

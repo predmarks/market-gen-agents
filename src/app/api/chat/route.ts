@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { db } from '@/db/client';
-import { topics, markets, signals, conversations, topicSignals, globalFeedback, resolutionFeedback, rules as rulesTable, activityLog, config } from '@/db/schema';
+import { topics, markets, signals, conversations, topicSignals, globalFeedback, resolutionFeedback, rules as rulesTable, activityLog, config, signalSources } from '@/db/schema';
 import { eq, desc, sql, and, gt, inArray } from 'drizzle-orm';
 import { rescoreTopic } from '@/agents/sourcer/scorer';
 import { loadRules } from '@/config/rules';
@@ -444,14 +444,36 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'research_topic',
-    description: 'Trigger web research for a topic — searches for new signals and links them. Runs in background.',
+    description: 'Trigger web research for a topic — searches for new signals and links them. Does NOT create or modify topics, only gathers signals. Runs in background.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        topicId: { type: 'string' as const },
+        topicId: { type: 'string' as const, description: 'Topic to link discovered signals to (optional)' },
         description: { type: 'string' as const, description: 'What to research (guides the web search)' },
       },
-      required: ['topicId', 'description'],
+      required: ['description'],
+    },
+  },
+  {
+    name: 'coalesce_topics',
+    description: 'Trigger topic coalescence — takes existing signals and creates/updates/merges topics from them. If topicId is provided, coalesces around that topic\'s signals. Runs in background.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        topicId: { type: 'string' as const, description: 'Optional: coalesce around this topic\'s signals' },
+      },
+    },
+  },
+  {
+    name: 'suggest_topic',
+    description: 'Full topic generation pipeline: researches a description via web search, saves signals, then creates or matches a topic. Use this when the user wants to explore a new topic idea. Runs in background.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        description: { type: 'string' as const, description: 'What to research and generate a topic for' },
+        topicId: { type: 'string' as const, description: 'Optional: placeholder topic to update with results' },
+      },
+      required: ['description'],
     },
   },
   {
@@ -619,6 +641,48 @@ const TOOLS: Anthropic.Tool[] = [
         marketId: { type: 'string' as const, description: 'Optional: market ID this feedback relates to' },
       },
       required: ['feedback'],
+    },
+  },
+  {
+    name: 'list_signal_sources',
+    description: 'List all signal sources (RSS feeds, scraped sites, APIs, social). Optionally filter by type or enabled status.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        type: { type: 'string' as const, description: 'Filter by type: rss, scrape, api, social' },
+        enabled: { type: 'boolean' as const, description: 'Filter by enabled status' },
+      },
+    },
+  },
+  {
+    name: 'create_signal_source',
+    description: 'Add a new signal source (RSS feed, scraped site, API endpoint, or social). For scrape type, config should include linkSelector, titleSelector, and baseUrl.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string' as const, description: 'Display name for the source' },
+        type: { type: 'string' as const, enum: ['rss', 'scrape', 'api', 'social'], description: 'Source type' },
+        url: { type: 'string' as const, description: 'Source URL' },
+        category: { type: 'string' as const, description: 'Market category (Política, Economía, Deportes, etc.)' },
+        config: { type: 'object' as const, description: 'Type-specific config (e.g. CSS selectors for scrape, provider/metric/unit for api, woeid for social)' },
+      },
+      required: ['name', 'type', 'url'],
+    },
+  },
+  {
+    name: 'update_signal_source',
+    description: 'Update a signal source — change name, URL, category, config, or toggle enabled/disabled.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        sourceId: { type: 'string' as const, description: 'Signal source ID' },
+        name: { type: 'string' as const },
+        url: { type: 'string' as const },
+        category: { type: 'string' as const },
+        enabled: { type: 'boolean' as const },
+        config: { type: 'object' as const },
+      },
+      required: ['sourceId'],
     },
   },
 ];
@@ -873,20 +937,53 @@ async function executeTool(block: Anthropic.ToolUseBlock, contextType: ContextTy
   }
 
   if (block.name === 'research_topic') {
-    const { topicId, description } = block.input as { topicId: string; description: string };
+    const { topicId, description } = block.input as { topicId?: string; description: string };
 
-    // Set topic to researching status
-    await db.update(topics).set({ status: 'researching', updatedAt: new Date() }).where(eq(topics.id, topicId));
+    // Set topic to researching status if provided
+    if (topicId) {
+      await db.update(topics).set({ status: 'researching', updatedAt: new Date() }).where(eq(topics.id, topicId));
+    }
 
-    // Trigger the existing suggest-topic Inngest job
+    // Trigger research-only pipeline (gathers signals, does not create/modify topics)
+    await inngest.send({
+      name: 'topics/research.requested',
+      data: { description, topicId },
+    });
+
+    if (topicId) {
+      const [researchT] = await db.select({ slug: topics.slug }).from(topics).where(eq(topics.id, topicId));
+      await logActivity('topic_research_started', { entityType: 'topic', entityId: topicId, entityLabel: description, detail: { topicSlug: researchT?.slug }, source: 'chat' });
+    } else {
+      await logActivity('topic_research_started', { entityType: 'system', entityLabel: description, source: 'chat' });
+    }
+    return `Investigación iniciada para "${description}". Se buscarán señales relacionadas.`;
+  }
+
+  if (block.name === 'coalesce_topics') {
+    const { topicId } = block.input as { topicId?: string };
+
+    await inngest.send({
+      name: 'topics/coalesce.requested',
+      data: { topicId },
+    });
+
+    await logActivity('topic_coalescence_started', { entityType: topicId ? 'topic' : 'system', entityId: topicId, source: 'chat' });
+    return topicId
+      ? `Coalescencia de temas iniciada para el tema ${topicId}. Se analizarán las señales vinculadas.`
+      : 'Coalescencia de temas iniciada. Se analizarán las señales recientes para crear/actualizar temas.';
+  }
+
+  if (block.name === 'suggest_topic') {
+    const { description, topicId } = block.input as { description: string; topicId?: string };
+
+    // Trigger the full pipeline: research + coalesce
     await inngest.send({
       name: 'topics/suggest.requested',
       data: { description, topicId },
     });
 
-    const [researchT] = await db.select({ slug: topics.slug }).from(topics).where(eq(topics.id, topicId));
-    await logActivity('topic_research_started', { entityType: 'topic', entityId: topicId, entityLabel: description, detail: { topicSlug: researchT?.slug }, source: 'chat' });
-    return `Investigación iniciada para "${description}". El tema se actualizará cuando termine.`;
+    await logActivity('topic_suggest_started', { entityType: 'system', entityLabel: description, detail: { topicId }, source: 'chat' });
+    return `Generación de tema iniciada para "${description}". Se investigará y creará/actualizará un tema.`;
   }
 
   if (block.name === 'update_rule') {
@@ -1100,6 +1197,49 @@ async function executeTool(block: Anthropic.ToolUseBlock, contextType: ContextTy
       source: 'chat',
     });
     return 'Feedback de resolución guardado. Se usará en futuras evaluaciones.';
+  }
+
+  if (block.name === 'list_signal_sources') {
+    const { type: filterType, enabled: filterEnabled } = block.input as { type?: string; enabled?: boolean };
+    let query = db.select().from(signalSources);
+    const conditions = [];
+    if (filterType) conditions.push(eq(signalSources.type, filterType));
+    if (filterEnabled !== undefined) conditions.push(eq(signalSources.enabled, filterEnabled));
+    const rows = conditions.length > 0
+      ? await query.where(and(...conditions))
+      : await query;
+    if (rows.length === 0) return 'No hay fuentes de señales configuradas.';
+    return rows.map((s) =>
+      `- [${s.id.slice(0, 8)}] ${s.enabled ? '✓' : '✗'} [${s.type}] **${s.name}** — ${s.url}${s.category ? ` (${s.category})` : ''}`
+    ).join('\n');
+  }
+
+  if (block.name === 'create_signal_source') {
+    const { name, type, url, category, config: sourceConfig } = block.input as {
+      name: string; type: string; url: string; category?: string; config?: Record<string, unknown>;
+    };
+    const [created] = await db.insert(signalSources).values({
+      name,
+      type,
+      url,
+      category: category ?? null,
+      config: sourceConfig ?? null,
+    }).returning({ id: signalSources.id });
+    await logActivity('signal_source_created', { entityType: 'signal_source', entityId: created.id, entityLabel: name, detail: { type, url, category }, source: 'chat' });
+    return `Fuente creada: "${name}" (${type}). ID: ${created.id}`;
+  }
+
+  if (block.name === 'update_signal_source') {
+    const { sourceId, ...fields } = block.input as Record<string, unknown>;
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (fields.name !== undefined) updates.name = fields.name;
+    if (fields.url !== undefined) updates.url = fields.url;
+    if (fields.category !== undefined) updates.category = fields.category;
+    if (fields.enabled !== undefined) updates.enabled = fields.enabled;
+    if (fields.config !== undefined) updates.config = fields.config;
+    await db.update(signalSources).set(updates).where(eq(signalSources.id, sourceId as string));
+    await logActivity('signal_source_updated', { entityType: 'signal_source', entityId: sourceId as string, entityLabel: (fields.name as string) ?? undefined, detail: fields as Record<string, unknown>, source: 'chat' });
+    return `Fuente ${sourceId} actualizada.`;
   }
 
   return 'Tool no reconocido.';

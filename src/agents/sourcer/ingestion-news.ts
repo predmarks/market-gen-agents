@@ -1,15 +1,15 @@
 import Parser from 'rss-parser';
-import { RSS_FEEDS } from '@/config/sources';
+import type { SignalSource } from '@/config/sources';
 import type { SourceSignal } from './types';
 
 const parser = new Parser({ timeout: 10_000 });
 const MAX_AGE_MS = 48 * 60 * 60 * 1000; // 48 hours
 
-export async function ingestNews(): Promise<SourceSignal[]> {
+export async function ingestNews(sources: SignalSource[]): Promise<SourceSignal[]> {
   const results = await Promise.allSettled(
-    RSS_FEEDS.map(async (feed) => {
-      const parsed = await parser.parseURL(feed.url);
-      return { feed, items: parsed.items };
+    sources.map(async (source) => {
+      const parsed = await parser.parseURL(source.url);
+      return { source, items: parsed.items };
     }),
   );
 
@@ -23,7 +23,7 @@ export async function ingestNews(): Promise<SourceSignal[]> {
       continue;
     }
 
-    const { feed, items } = result.value;
+    const { source, items } = result.value;
     const sorted = items
       .filter((item) => {
         if (!item.isoDate) return true; // include items without date
@@ -44,10 +44,10 @@ export async function ingestNews(): Promise<SourceSignal[]> {
         text: item.title || '',
         summary: (item.contentSnippet || item.content || '').slice(0, 500),
         url: item.link,
-        source: feed.name,
+        source: source.name,
         publishedAt: item.isoDate || new Date().toISOString(),
         entities: [],
-        category: feed.category,
+        category: source.category,
       });
     }
   }

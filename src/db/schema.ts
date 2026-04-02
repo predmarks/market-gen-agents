@@ -228,6 +228,20 @@ export const resolutionFeedback = pgTable('resolution_feedback', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }).enableRLS();
 
+export const signalSources = pgTable('signal_sources', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  type: varchar('type', { length: 20 }).notNull(), // 'rss' | 'scrape' | 'api' | 'social'
+  url: text('url').notNull(),
+  category: varchar('category', { length: 30 }),
+  enabled: boolean('enabled').notNull().default(true),
+  config: jsonb('config').$type<Record<string, unknown>>(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  index('signal_sources_type_idx').on(table.type),
+]).enableRLS();
+
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   username: varchar('username', { length: 50 }).notNull().unique(),

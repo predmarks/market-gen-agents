@@ -1,11 +1,11 @@
 import { db } from '@/db/client';
-import { markets } from '@/db/schema';
+import { markets, topics as topicsTable } from '@/db/schema';
 import { eq, sql, inArray } from 'drizzle-orm';
 import { ingestAllSources } from './ingestion';
-import { extractTopics } from './topic-extractor';
+import { coalesceTopics } from './topic-coalescence';
 import { generateMarkets } from './generator';
 import { deduplicateCandidates } from './deduplication';
-import type { GeneratedCandidate } from './types';
+import type { GeneratedCandidate, Topic } from './types';
 
 export const CANDIDATE_CAP = 5;
 
@@ -30,9 +30,27 @@ export async function runSourcing(): Promise<{ candidateIds: string[] }> {
     return { candidateIds: [] };
   }
 
-  // Extract topics
-  const topics = await extractTopics(signals);
-  console.log(`Extracted ${topics.length} topics`);
+  // Coalesce signals into topics
+  const coalesced = await coalesceTopics({ signals });
+  console.log(`Coalesced into ${coalesced.topicIds.length} topics`);
+
+  // Load coalesced topics for generation
+  const topics: Topic[] = coalesced.topicIds.length > 0
+    ? (await db
+        .select()
+        .from(topicsTable)
+        .where(inArray(topicsTable.id, coalesced.topicIds))
+      ).map((row) => ({
+        name: row.name,
+        slug: row.slug,
+        summary: row.summary,
+        signalIndices: [],
+        suggestedAngles: row.suggestedAngles,
+        category: row.category as Topic['category'],
+        score: row.score,
+      }))
+    : [];
+  console.log(`Loaded ${topics.length} topics for generation`);
 
   // Load open market titles for dedup context
   const openMarkets = await db

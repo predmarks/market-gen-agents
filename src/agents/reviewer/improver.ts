@@ -13,6 +13,7 @@ REGLAS:
 - Items marcados [NO CORREGIDO] son problemas que NO se resolvieron en la iteración anterior.
   Intentá una solución DIFERENTE — el enfoque previo no funcionó. Reenmarcá la pregunta, ajustá criterios o cambiá el ángulo, pero NUNCA cambies el tema central del mercado.
 - NUNCA cambies el tema del mercado. Podés ajustar el ángulo, la pregunta o el encuadre, pero el sujeto central (qué se está prediciendo) debe ser el mismo. Si el mercado es sobre pobreza, no lo conviertas en uno sobre déficit fiscal.
+- Los mercados NUNCA se anulan. Toda contingencia debe resolverse a uno de los outcomes definidos, nunca a "anulado" o "void".
 - Devolvé el mercado completo con todas las mejoras aplicadas.
 - Todo el contenido en español argentino.`;
 

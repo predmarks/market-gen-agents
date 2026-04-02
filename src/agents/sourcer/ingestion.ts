@@ -1,19 +1,29 @@
 import { ingestNews } from './ingestion-news';
 import { ingestData } from './ingestion-data';
 import { ingestTwitter } from './ingestion-twitter';
+import { ingestScraped } from './ingestion-scrape';
+import { loadSignalSources } from '@/config/sources';
 import { db } from '@/db/client';
 import { signals as signalsTable } from '@/db/schema';
 import { eq, and, gte, inArray, isNotNull } from 'drizzle-orm';
 import type { IngestionResult, DataPoint, SourceSignal } from './types';
 
 export async function ingestAllSources(): Promise<IngestionResult> {
-  const [newsSignals, dataSignals, twitterSignals] = await Promise.all([
-    ingestNews(),
-    ingestData(),
-    ingestTwitter(),
+  const sources = await loadSignalSources();
+
+  const rssSources = sources.filter((s) => s.type === 'rss');
+  const scrapeSources = sources.filter((s) => s.type === 'scrape');
+  const apiSources = sources.filter((s) => s.type === 'api');
+  const socialSources = sources.filter((s) => s.type === 'social');
+
+  const [newsSignals, scrapeSignals, dataSignals, twitterSignals] = await Promise.all([
+    ingestNews(rssSources),
+    ingestScraped(scrapeSources),
+    ingestData(apiSources),
+    ingestTwitter(socialSources),
   ]);
 
-  const allSignals = [...newsSignals, ...dataSignals, ...twitterSignals];
+  const allSignals = [...newsSignals, ...scrapeSignals, ...dataSignals, ...twitterSignals];
 
   // Extract all data points from data signals for the generator prompt
   const dataPoints: DataPoint[] = dataSignals.flatMap(

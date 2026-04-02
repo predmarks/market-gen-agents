@@ -1,4 +1,4 @@
-import { BCRA_VARIABLES, BCRA_API_BASE, AMBITO_DOLAR_BLUE_URL, AMBITO_RIESGO_PAIS_URL } from '@/config/sources';
+import type { SignalSource } from '@/config/sources';
 import type { SourceSignal, DataPoint } from './types';
 
 function formatDate(date: Date): string {
@@ -12,9 +12,10 @@ function getDateRange(): { desde: string; hasta: string } {
   return { desde: formatDate(desde), hasta: formatDate(hasta) };
 }
 
-async function fetchBCRAVariable(variableId: number, metric: string, unit: string): Promise<DataPoint | null> {
+async function fetchBCRAVariable(source: SignalSource): Promise<DataPoint | null> {
+  const config = source.config as { variableId: number; metric: string; unit: string };
   const { desde, hasta } = getDateRange();
-  const url = `${BCRA_API_BASE}/${variableId}?desde=${desde}&hasta=${hasta}`;
+  const url = `${source.url}?desde=${desde}&hasta=${hasta}`;
 
   const res = await fetch(url, {
     headers: { Accept: 'application/json' },
@@ -22,7 +23,7 @@ async function fetchBCRAVariable(variableId: number, metric: string, unit: strin
   });
 
   if (!res.ok) {
-    console.warn(`BCRA API failed for variable ${variableId}: ${res.status}`);
+    console.warn(`BCRA API failed for ${config.metric}: ${res.status}`);
     return null;
   }
 
@@ -37,16 +38,18 @@ async function fetchBCRAVariable(variableId: number, metric: string, unit: strin
   const previous = entries.length > 1 ? entries[entries.length - 2] : undefined;
 
   return {
-    metric,
+    metric: config.metric,
     currentValue: current.valor,
     previousValue: previous?.valor,
-    unit,
+    unit: config.unit,
   };
 }
 
-async function fetchDolarBlue(): Promise<DataPoint | null> {
+async function fetchAmbitoSource(source: SignalSource): Promise<DataPoint | null> {
+  const config = source.config as { metric: string; unit: string };
+
   try {
-    const res = await fetch(AMBITO_DOLAR_BLUE_URL, {
+    const res = await fetch(source.url, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
       signal: AbortSignal.timeout(10_000),
     });
@@ -54,63 +57,44 @@ async function fetchDolarBlue(): Promise<DataPoint | null> {
     if (!res.ok) return null;
 
     const data = await res.json();
-    // Ámbito returns: { compra, venta, fecha, variacion, ... }
+
+    if (config.metric === 'Riesgo País') {
+      const valor = parseInt(data.ultimo, 10);
+      if (isNaN(valor)) return null;
+      return { metric: config.metric, currentValue: valor, unit: config.unit };
+    }
+
+    // Dólar Blue and similar currency sources
     const venta = parseFloat(data.venta?.replace(',', '.'));
     const compra = parseFloat(data.compra?.replace(',', '.'));
-
     if (isNaN(venta)) return null;
 
     return {
-      metric: 'Dólar Blue',
+      metric: config.metric,
       currentValue: venta,
       previousValue: compra !== venta ? compra : undefined,
-      unit: 'ARS (venta)',
+      unit: config.unit,
     };
   } catch (err) {
-    console.warn('Dolar blue fetch failed:', err);
+    console.warn(`Ámbito fetch failed for ${config.metric}:`, err);
     return null;
   }
 }
 
-async function fetchRiesgoPais(): Promise<DataPoint | null> {
-  try {
-    const res = await fetch(AMBITO_RIESGO_PAIS_URL, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    // Ámbito returns: { ultimo, fecha, variacion, class-variacion }
-    const valor = parseInt(data.ultimo, 10);
-    if (isNaN(valor)) return null;
-
-    return {
-      metric: 'Riesgo País',
-      currentValue: valor,
-      unit: 'puntos',
-    };
-  } catch (err) {
-    console.warn('Riesgo país fetch failed:', err);
+export async function ingestData(sources: SignalSource[]): Promise<SourceSignal[]> {
+  const promises = sources.map(async (source) => {
+    const provider = (source.config as { provider?: string })?.provider;
+    if (provider === 'bcra') return fetchBCRAVariable(source);
+    if (provider === 'ambito') return fetchAmbitoSource(source);
+    console.warn(`Unknown API provider for source "${source.name}"`);
     return null;
-  }
-}
+  });
 
-export async function ingestData(): Promise<SourceSignal[]> {
-  const bcraPromises = BCRA_VARIABLES.map((v) =>
-    fetchBCRAVariable(v.id, v.metric, v.unit),
-  );
-
-  const results = await Promise.allSettled([
-    ...bcraPromises,
-    fetchDolarBlue(),
-    fetchRiesgoPais(),
-  ]);
-
+  const results = await Promise.allSettled(promises);
   const signals: SourceSignal[] = [];
 
-  for (const result of results) {
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
     if (result.status === 'rejected') {
       console.warn('Data fetch failed:', result.reason);
       continue;
@@ -126,9 +110,7 @@ export async function ingestData(): Promise<SourceSignal[]> {
     signals.push({
       type: 'data',
       text: `${dataPoint.metric}: ${dataPoint.currentValue} ${dataPoint.unit}${prevText}`,
-      source: dataPoint.metric.includes('BCRA') || dataPoint.metric.includes('Base Monetaria') || dataPoint.metric.includes('Dólar Oficial')
-        ? 'BCRA API'
-        : 'Ámbito Financiero',
+      source: sources[i].name,
       publishedAt: new Date().toISOString(),
       entities: [],
       dataPoints: [dataPoint],

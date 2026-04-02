@@ -26,7 +26,7 @@ export async function POST(
 
   await db
     .update(markets)
-    .set({ status: 'processing' })
+    .set({ status: 'processing', iterations: null, review: null })
     .where(eq(markets.id, id));
 
   await logMarketEvent(id, 'status_changed', { detail: { from: 'candidate', to: 'processing' } });

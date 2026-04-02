@@ -388,5 +388,16 @@ export const reviewJob = inngest.createFunction(
         });
       });
     }
+
+    // Fallback: all iterations were already completed (retry/resume after completion)
+    await step.run('finish-fallback', async () => {
+      await db.update(markets)
+        .set({ status: 'candidate' })
+        .where(eq(markets.id, marketId));
+      await logMarketEvent(marketId, 'pipeline_opened', {
+        detail: { reason: 'All iterations already completed' },
+      });
+    });
+    return { status: 'candidate', reason: 'fallback-after-completed-iterations' };
   },
 );

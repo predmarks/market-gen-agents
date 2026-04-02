@@ -1,5 +1,5 @@
 import { callClaude } from '@/lib/llm';
-import { HARD_RULES, SOFT_RULES } from '@/config/rules';
+import { loadRules } from '@/config/rules';
 import { db } from '@/db/client';
 import { marketEvents, markets, globalFeedback, config } from '@/db/schema';
 import { eq, desc, and, gte, isNotNull, sql, like } from 'drizzle-orm';
@@ -191,10 +191,11 @@ function formatDataPoints(dataPoints: DataPoint[]): string {
     .join('\n');
 }
 
-function formatRules(): string {
-  const hard = HARD_RULES.map((r) => `- ${r.id}: ${r.description}`).join('\n');
-  const soft = SOFT_RULES.map((r) => `- ${r.id}: ${r.description}`).join('\n');
-  return `Reglas estrictas (rechazo automático si falla):\n${hard}\n\nAdvertencias:\n${soft}`;
+async function formatRules(): Promise<string> {
+  const { hard, soft } = await loadRules();
+  const hardText = hard.map((r) => `- ${r.id}: ${r.description}`).join('\n');
+  const softText = soft.map((r) => `- ${r.id}: ${r.description}`).join('\n');
+  return `Reglas estrictas (rechazo automático si falla):\n${hardText}\n\nAdvertencias:\n${softText}`;
 }
 
 function formatTopics(topics: Topic[]): string {
@@ -216,10 +217,11 @@ export async function generateMarkets(
 ): Promise<GeneratedCandidate[]> {
   if (topics.length === 0) return [];
 
-  const [triageFeedback, globalFeedbackText, promptTemplate] = await Promise.all([
+  const [triageFeedback, globalFeedbackText, promptTemplate, rulesText] = await Promise.all([
     loadTriageFeedback(),
     loadGlobalFeedback(),
     loadGenerationPrompt(),
+    formatRules(),
   ]);
   const today = new Date().toISOString().split('T')[0];
 
@@ -238,7 +240,7 @@ export async function generateMarkets(
     : '';
 
   const system = promptTemplate
-    .replace('{rules}', formatRules())
+    .replace('{rules}', rulesText)
     .replace('{targetCount}', String(targetCount))
     + editorBlock;
 

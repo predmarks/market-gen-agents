@@ -1,7 +1,7 @@
 import { config } from 'dotenv';
 config({ path: ['.env.local', '.env'] });
 import postgres from 'postgres';
-import { HARD_RULES, SOFT_RULES } from '../src/config/rules';
+import { DEFAULT_HARD_RULES, DEFAULT_SOFT_RULES } from '../src/config/rules';
 
 const sql = postgres(process.env.POSTGRES_URL!);
 
@@ -20,7 +20,7 @@ async function main() {
   `;
   await sql`ALTER TABLE rules ENABLE ROW LEVEL SECURITY`;
 
-  const allRules = [...HARD_RULES, ...SOFT_RULES];
+  const allRules = [...DEFAULT_HARD_RULES, ...DEFAULT_SOFT_RULES];
   for (const rule of allRules) {
     await sql`
       INSERT INTO rules (id, type, description, "check")

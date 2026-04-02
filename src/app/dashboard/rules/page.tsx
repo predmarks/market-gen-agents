@@ -1,14 +1,10 @@
 export const dynamic = 'force-dynamic';
 
+import { loadRules, type Rule } from '@/config/rules';
 import { db } from '@/db/client';
 import { rules } from '@/db/schema';
-import { HARD_RULES, SOFT_RULES } from '@/config/rules';
 
-interface RuleRow {
-  id: string;
-  type: string;
-  description: string;
-  check: string;
+interface RuleRow extends Rule {
   enabled: boolean;
 }
 
@@ -16,14 +12,17 @@ export default async function RulesPage() {
   let allRules: RuleRow[];
 
   try {
+    // Show ALL rules (including disabled) so editors can manage them
     const rows = await db.select().from(rules);
     if (rows.length > 0) {
-      allRules = rows;
+      allRules = rows.map((r) => ({ id: r.id, type: r.type as 'hard' | 'soft', description: r.description, check: r.check, enabled: r.enabled }));
     } else {
-      allRules = [...HARD_RULES, ...SOFT_RULES].map((r) => ({ ...r, enabled: true }));
+      const { hard, soft } = await loadRules();
+      allRules = [...hard, ...soft].map((r) => ({ ...r, enabled: true }));
     }
   } catch {
-    allRules = [...HARD_RULES, ...SOFT_RULES].map((r) => ({ ...r, enabled: true }));
+    const { hard, soft } = await loadRules();
+    allRules = [...hard, ...soft].map((r) => ({ ...r, enabled: true }));
   }
 
   const hardRules = allRules.filter((r) => r.type === 'hard');

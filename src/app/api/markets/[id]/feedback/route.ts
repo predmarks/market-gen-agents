@@ -5,7 +5,7 @@ import { markets, globalFeedback } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { logMarketEvent } from '@/lib/market-events';
 import { logUsage } from '@/lib/llm';
-import { HARD_RULES, SOFT_RULES } from '@/config/rules';
+import { loadRules } from '@/config/rules';
 
 const client = new Anthropic({ maxRetries: 5 });
 
@@ -74,8 +74,11 @@ export async function POST(
     return NextResponse.json({ error: 'Market not found' }, { status: 404 });
   }
 
-  // Load existing global feedback for dedup context
-  const existingGlobal = await db.select().from(globalFeedback);
+  // Load existing global feedback and rules from DB
+  const [existingGlobal, { hard: hardRules, soft: softRules }] = await Promise.all([
+    db.select().from(globalFeedback),
+    loadRules(),
+  ]);
   const existingGlobalTexts = existingGlobal.map((r) => r.text);
 
   const systemMessage = `${SYSTEM_PROMPT}
@@ -89,9 +92,9 @@ MERCADO EN CUESTIÓN:
 
 REGLAS DE VALIDACIÓN (el usuario puede referirse a ellas por ID):
 Reglas estrictas:
-${HARD_RULES.map((r) => `- ${r.id}: ${r.description}`).join('\n')}
+${hardRules.map((r) => `- ${r.id}: ${r.description}`).join('\n')}
 Advertencias:
-${SOFT_RULES.map((r) => `- ${r.id}: ${r.description}`).join('\n')}
+${softRules.map((r) => `- ${r.id}: ${r.description}`).join('\n')}
 
 FEEDBACK GLOBAL EXISTENTE:
 ${existingGlobalTexts.length > 0 ? existingGlobalTexts.map((t, i) => `${i + 1}. ${t}`).join('\n') : 'Ninguno.'}`;

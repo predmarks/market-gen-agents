@@ -1,5 +1,5 @@
 import { callClaude } from '@/lib/llm';
-import { HARD_RULES, SOFT_RULES, type Rule } from '@/config/rules';
+import { loadRules, type Rule } from '@/config/rules';
 import type { RuleResult } from '@/db/types';
 import type { DataVerificationResult } from './data-verifier';
 import type { MarketRecord } from './types';
@@ -45,7 +45,7 @@ const OUTPUT_SCHEMA = {
   required: ['hardRuleResults', 'softRuleResults'] as const,
 };
 
-function formatRules(rules: typeof HARD_RULES): string {
+function formatRules(rules: Rule[]): string {
   return rules
     .map((r) => `${r.id}: ${r.description}\nVerificación: ${r.check}`)
     .join('\n\n');
@@ -70,8 +70,9 @@ export async function checkRules(
   dataVerification: DataVerificationResult,
   openMarkets: { id: string; title: string }[],
 ): Promise<RulesCheckResult> {
-  const applicableHard = filterRulesForMarket(HARD_RULES, market);
-  const applicableSoft = filterRulesForMarket(SOFT_RULES, market);
+  const { hard, soft } = await loadRules();
+  const applicableHard = filterRulesForMarket(hard, market);
+  const applicableSoft = filterRulesForMarket(soft, market);
 
   const marketSummary = {
     title: market.title,

@@ -5,7 +5,8 @@ export interface Rule {
   check: string;
 }
 
-export const HARD_RULES: Rule[] = [
+// Default rules — used as fallback when DB is unavailable and for seeding
+export const DEFAULT_HARD_RULES: Rule[] = [
   {
     id: 'H1',
     type: 'hard',
@@ -93,7 +94,7 @@ export const HARD_RULES: Rule[] = [
   },
 ];
 
-export const SOFT_RULES: Rule[] = [
+export const DEFAULT_SOFT_RULES: Rule[] = [
   {
     id: 'S1',
     type: 'soft',
@@ -175,5 +176,5 @@ export async function loadRules(): Promise<{ hard: Rule[]; soft: Rule[] }> {
   } catch {
     // DB not available, use hardcoded
   }
-  return { hard: HARD_RULES, soft: SOFT_RULES };
+  return { hard: DEFAULT_HARD_RULES, soft: DEFAULT_SOFT_RULES };
 }

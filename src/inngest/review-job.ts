@@ -343,6 +343,20 @@ export const reviewJob = inngest.createFunction(
           console.warn(`[review] Validation warnings:`, validation.warnings);
         }
 
+        // Detect and prevent outcome-type conversion (multi → binary)
+        const wasBinary = Array.isArray(currentMarket.outcomes) &&
+          currentMarket.outcomes.length === 2 &&
+          currentMarket.outcomes.includes('Si') &&
+          currentMarket.outcomes.includes('No');
+        const isBinaryNow = improved.outcomes.length === 2 &&
+          improved.outcomes.includes('Si') &&
+          improved.outcomes.includes('No');
+
+        if (!wasBinary && isBinaryNow) {
+          console.warn(`[review] Improver converted multi-outcome to binary for "${improved.title}" — reverting outcomes`);
+          improved.outcomes = currentMarket.outcomes as string[];
+        }
+
         // Compute what changed for logging
         const changes: Record<string, { from: unknown; to: unknown }> = {};
         const trackFields = ['title', 'description', 'resolutionCriteria', 'resolutionSource', 'contingencies', 'category', 'outcomes', 'endTimestamp', 'expectedResolutionDate', 'timingSafety'] as const;

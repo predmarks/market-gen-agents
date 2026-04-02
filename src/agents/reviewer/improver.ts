@@ -9,6 +9,7 @@ Tu trabajo es mejorar mercados que fallaron la revisión automática, corrigiend
 REGLAS:
 - NUNCA inventar datos. Si necesitás un número que no tenés, escribí "[VERIFICAR: descripción del dato necesario]".
 - Corregí SOLAMENTE los problemas señalados en el feedback. No cambies lo que estaba bien.
+- NUNCA cambies el tipo de mercado: si el mercado es multi-opción, mantenelo multi-opción. Si es binario, mantenelo binario. Convertir un multi-opción a binario destruye el sentido del mercado.
 - Items marcados [NO CORREGIDO] son problemas que NO se resolvieron en la iteración anterior.
   Intentá una solución DIFERENTE — el enfoque previo no funcionó. Reestructurá, reenmarcá o cambiá la estrategia.
 - Devolvé el mercado completo con todas las mejoras aplicadas.
@@ -88,7 +89,17 @@ export async function improveMarket(
     ? `\nFEEDBACK HUMANO (prioritario):\n${humanFeedback.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n`
     : '';
 
+  const isBinary = Array.isArray(market.outcomes) &&
+    market.outcomes.length === 2 &&
+    market.outcomes.includes('Si') &&
+    market.outcomes.includes('No');
+  const marketTypeLabel = isBinary
+    ? 'Binario (Si/No)'
+    : `Multi-opción (${market.outcomes.length} opciones: ${market.outcomes.join(', ')})`;
+
   const userMessage = `Mejorá este mercado corrigiendo los problemas detectados.
+
+TIPO DE MERCADO: ${marketTypeLabel} — NO cambiar el tipo.
 
 FEEDBACK DE LA REVISIÓN:
 ${feedback}

@@ -1,6 +1,6 @@
 import { db } from '@/db/client';
 import { markets } from '@/db/schema';
-import { eq, and, isNotNull, sql } from 'drizzle-orm';
+import { eq, and, isNotNull, isNull, sql } from 'drizzle-orm';
 import { fetchOnchainMarkets } from './indexer';
 import { expandMarket } from './expand-market';
 import { fetchOnchainMarketData, fetchPendingBalances } from './onchain';
@@ -65,7 +65,7 @@ export async function syncMarketStats(chainId: number = MAINNET_CHAIN_ID): Promi
       const [titleMatch] = await db
         .select({ id: markets.id })
         .from(markets)
-        .where(eq(markets.title, om.name))
+        .where(and(eq(markets.title, om.name), isNull(markets.onchainId)))
         .limit(1);
 
       const isResolved = om.resolvedTo > 0;
@@ -230,7 +230,7 @@ export async function syncDeployedMarkets(chainId: number = MAINNET_CHAIN_ID): P
         };
 
         // Check for existing candidate by title before inserting
-        const [titleMatch] = await db.select({ id: markets.id }).from(markets).where(eq(markets.title, om.name)).limit(1);
+        const [titleMatch] = await db.select({ id: markets.id }).from(markets).where(and(eq(markets.title, om.name), isNull(markets.onchainId))).limit(1);
         let inserted: { id: string };
 
         if (titleMatch) {
@@ -315,7 +315,7 @@ export async function syncDeployedMarkets(chainId: number = MAINNET_CHAIN_ID): P
       }
     } else {
       // Check for existing candidate by title before inserting
-      const [titleMatch] = await db.select({ id: markets.id }).from(markets).where(eq(markets.title, om.name)).limit(1);
+      const [titleMatch] = await db.select({ id: markets.id }).from(markets).where(and(eq(markets.title, om.name), isNull(markets.onchainId))).limit(1);
       let inserted: { id: string };
 
       if (titleMatch) {
@@ -371,7 +371,8 @@ export async function syncDeployedMarkets(chainId: number = MAINNET_CHAIN_ID): P
         }
         if (onchainData.outcomes.length > 0) {
           realOutcomes = onchainData.outcomes;
-          updates.outcomes = realOutcomes;
+          // Don't overwrite DB outcomes — onchain outcomes may be corrupted
+          // by comma-splitting (contract joins string[] with commas internally)
         }
       } catch (err) {
         console.warn(`[sync] Could not fetch onchain data for market ${market.onchainId}:`, err);

@@ -3,6 +3,8 @@ import type { SignalSource } from '@/config/sources';
 import type { SourceSignal } from './types';
 
 interface ScrapeConfig {
+  /** Scrape mode: 'links' extracts article links, 'content' extracts page content (default: 'links') */
+  mode?: 'links' | 'content';
   /** CSS selector for article links (default: 'a[href*="/notas/"]') */
   linkSelector?: string;
   /** CSS selector for title within or near the link (default: 'h2, h3') */
@@ -13,6 +15,16 @@ interface ScrapeConfig {
   urlDatePattern?: string;
   /** Max age in hours for articles (default: 168 = 7 days) */
   maxAgeHours?: number;
+  /** CSS selector for content area (content mode only) */
+  contentSelector?: string;
+  /** Descriptive label stored as signal.text (content mode only) */
+  contentLabel?: string;
+  /** Max chars for extracted content (default: 5000) */
+  maxContentLength?: number;
+  /** If true, fall back to LLM web search when cheerio yields minimal content */
+  llmFallback?: boolean;
+  /** Search query hint for LLM fallback (defaults to contentLabel) */
+  llmSearchQuery?: string;
 }
 
 function extractDateFromUrl(href: string, pattern?: string): string | null {
@@ -51,6 +63,91 @@ export async function ingestScraped(sources: SignalSource[]): Promise<SourceSign
 
 async function scrapeSingleSource(source: SignalSource): Promise<SourceSignal[]> {
   const config = (source.config ?? {}) as ScrapeConfig;
+
+  if (config.mode === 'content') {
+    return scrapeContentSource(source, config);
+  }
+
+  return scrapeLinksSource(source, config);
+}
+
+// --- Content mode: extract structured text from a page section ---
+
+async function scrapeContentSource(source: SignalSource, config: ScrapeConfig): Promise<SourceSignal[]> {
+  const maxLen = config.maxContentLength ?? 5000;
+  const label = config.contentLabel ?? source.name;
+
+  // Step 1: Try cheerio extraction
+  let content = '';
+  try {
+    const res = await fetch(source.url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PredmarksBot/1.0)' },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const $ = cheerio.load(html);
+      const selector = config.contentSelector ?? 'main';
+      // Extract text preserving some structure via newlines between block elements
+      const $area = $(selector);
+      if ($area.length > 0) {
+        // Replace block-level elements with newlines for readability
+        $area.find('br').replaceWith('\n');
+        $area.find('tr').each((_i, el) => { $(el).append('\n'); });
+        $area.find('li, dt, dd').each((_i, el) => { $(el).append('\n'); });
+        $area.find('p, div, h1, h2, h3, h4, h5, h6').each((_i, el) => {
+          $(el).prepend('\n');
+          $(el).append('\n');
+        });
+        content = $area.text().replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+      }
+    }
+  } catch (err) {
+    console.warn(`Content scrape fetch failed for ${source.name}:`, err);
+  }
+
+  // Step 2: If cheerio yielded minimal content and LLM fallback is enabled, use web search
+  if (content.length < 50 && config.llmFallback) {
+    try {
+      const { callClaudeWithSearch } = await import('@/lib/llm');
+      const searchQuery = config.llmSearchQuery ?? label;
+      const { result } = await callClaudeWithSearch<{ content: string }>({
+        system: `Sos un extractor de datos. Buscá la información solicitada y devolvé el contenido estructurado en texto plano.
+Incluí todos los datos relevantes: fechas, nombres, resultados, horarios, etc.
+Respondé en español argentino. Sé exhaustivo pero conciso.`,
+        userMessage: `Extraé los datos actualizados de: ${searchQuery}\nFuente principal: ${source.url}\nFecha actual: ${new Date().toISOString().split('T')[0]}`,
+        outputSchema: {
+          type: 'object' as const,
+          properties: {
+            content: { type: 'string' as const, description: 'Contenido estructurado extraído' },
+          },
+          required: ['content'] as const,
+        },
+        operation: 'content_scrape',
+      });
+      content = result.content;
+    } catch (err) {
+      console.warn(`Content scrape LLM fallback failed for ${source.name}:`, err);
+    }
+  }
+
+  if (!content) return [];
+
+  return [{
+    type: 'news',
+    text: label,
+    summary: content.slice(0, maxLen),
+    url: source.url,
+    source: source.name,
+    publishedAt: new Date().toISOString(),
+    entities: [],
+    category: source.category,
+  }];
+}
+
+// --- Links mode: extract article titles from page (original behavior) ---
+
+async function scrapeLinksSource(source: SignalSource, config: ScrapeConfig): Promise<SourceSignal[]> {
   const linkSelector = config.linkSelector ?? 'a[href*="/notas/"]';
   const titleSelector = config.titleSelector ?? 'h2, h3';
   const baseUrl = config.baseUrl ?? source.url.replace(/\/$/, '');

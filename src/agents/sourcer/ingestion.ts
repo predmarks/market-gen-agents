@@ -51,7 +51,7 @@ export async function ingestAllSources(): Promise<IngestionResult> {
           .onConflictDoUpdate({
             target: signalsTable.url,
             targetWhere: isNotNull(signalsTable.url),
-            set: { text: signal.text },
+            set: { text: signal.text, summary: signal.summary ?? null },
           })
           .returning({ id: signalsTable.id });
 

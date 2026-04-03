@@ -85,7 +85,7 @@ async function buildTopicContext(topicId: string): Promise<string> {
   if (!topic) return 'Tema no encontrado.';
 
   const linkedSignals = await db
-    .select({ text: signals.text, source: signals.source, url: signals.url, publishedAt: signals.publishedAt })
+    .select({ text: signals.text, summary: signals.summary, source: signals.source, url: signals.url, publishedAt: signals.publishedAt })
     .from(topicSignals)
     .innerJoin(signals, eq(topicSignals.signalId, signals.id))
     .where(eq(topicSignals.topicId, topicId))
@@ -120,7 +120,7 @@ async function buildTopicContext(topicId: string): Promise<string> {
 ${topic.suggestedAngles.length > 0 ? topic.suggestedAngles.map((a) => `- ${a}`).join('\n') : 'Sin ángulos.'}
 
 SEÑALES VINCULADAS (${linkedSignals.length}):
-${linkedSignals.length > 0 ? linkedSignals.map((s, i) => `${i + 1}. [${s.source}] ${s.text} (${s.publishedAt.toISOString().split('T')[0]})${s.url ? ` ${s.url}` : ''}`).join('\n') : 'Sin señales.'}
+${linkedSignals.length > 0 ? linkedSignals.map((s, i) => `${i + 1}. [${s.source}] ${s.text} (${s.publishedAt.toISOString().split('T')[0]})${s.url ? ` ${s.url}` : ''}${s.summary ? `\n   ${s.summary}` : ''}`).join('\n') : 'Sin señales.'}
 
 FEEDBACK PREVIO:
 ${feedbackEntries.length > 0 ? feedbackEntries.map((f) => `- ${f.text}`).join('\n') : 'Sin feedback.'}${marketsSection}`;
@@ -149,7 +149,7 @@ async function buildMarketContext(marketId: string, tz: string = 'America/Argent
   let signalsContext = '';
   if (sourceTopicIds.length > 0) {
     const relatedSignals = await db
-      .select({ text: signals.text, source: signals.source, url: signals.url, publishedAt: signals.publishedAt })
+      .select({ text: signals.text, summary: signals.summary, source: signals.source, url: signals.url, publishedAt: signals.publishedAt })
       .from(topicSignals)
       .innerJoin(signals, eq(topicSignals.signalId, signals.id))
       .where(inArray(topicSignals.topicId, sourceTopicIds))
@@ -157,7 +157,7 @@ async function buildMarketContext(marketId: string, tz: string = 'America/Argent
       .limit(20);
 
     if (relatedSignals.length > 0) {
-      signalsContext = `\n\nSEÑALES RELACIONADAS (${relatedSignals.length}):\n${relatedSignals.map((s, i) => `${i + 1}. [${s.source}] ${s.text} (${s.publishedAt.toISOString().split('T')[0]})${s.url ? ` ${s.url}` : ''}`).join('\n')}`;
+      signalsContext = `\n\nSEÑALES RELACIONADAS (${relatedSignals.length}):\n${relatedSignals.map((s, i) => `${i + 1}. [${s.source}] ${s.text} (${s.publishedAt.toISOString().split('T')[0]})${s.url ? ` ${s.url}` : ''}${s.summary ? `\n   ${s.summary}` : ''}`).join('\n')}`;
     }
   }
 
@@ -260,13 +260,13 @@ async function loadMarketsSummary(): Promise<string> {
 
 async function loadSignalsSummary(): Promise<string> {
   const allSignals = await db
-    .select({ id: signals.id, type: signals.type, text: signals.text, source: signals.source, category: signals.category, score: signals.score, publishedAt: signals.publishedAt })
+    .select({ id: signals.id, type: signals.type, text: signals.text, summary: signals.summary, source: signals.source, category: signals.category, score: signals.score, publishedAt: signals.publishedAt })
     .from(signals)
     .orderBy(desc(signals.publishedAt))
     .limit(100);
 
   if (allSignals.length === 0) return '';
-  const lines = allSignals.map((s) => `- [${s.id}] ${s.type} | ${s.text.slice(0, 120)} | ${s.source} | ${s.category} | score:${s.score} | ${s.publishedAt?.toISOString().split('T')[0] ?? ''}`);
+  const lines = allSignals.map((s) => `- [${s.id}] ${s.type} | ${s.text.slice(0, 120)} | ${s.source} | ${s.category} | score:${s.score} | ${s.publishedAt?.toISOString().split('T')[0] ?? ''}${s.summary ? ` | ${s.summary.slice(0, 200)}` : ''}`);
   return `\nSEÑALES RECIENTES (${allSignals.length}):\n${lines.join('\n')}`;
 }
 
@@ -726,7 +726,7 @@ async function executeTool(block: Anthropic.ToolUseBlock, contextType: ContextTy
 
     if (rows.length === 0) return 'No se encontraron señales.';
     return rows.map((s) =>
-      `- [${s.id}] [${s.type}] [${s.source}] ${s.text} | cat:${s.category ?? '?'} | score:${s.score ?? '?'} | ${s.publishedAt.toISOString().split('T')[0]}`
+      `- [${s.id}] [${s.type}] [${s.source}] ${s.text} | cat:${s.category ?? '?'} | score:${s.score ?? '?'} | ${s.publishedAt.toISOString().split('T')[0]}${s.summary ? `\n  Resumen: ${s.summary}` : ''}`
     ).join('\n');
   }
 

@@ -103,6 +103,23 @@ function defaultsToSignalSources(): SignalSource[] {
   }
 
   sources.push({
+    id: 'default-scrape-liga-profesional',
+    name: 'Liga Profesional',
+    type: 'scrape',
+    url: 'https://www.ligaprofesional.ar/torneo-apertura-2026/',
+    category: 'Deportes',
+    enabled: true,
+    config: {
+      mode: 'content',
+      contentSelector: '#Opta_0, #Opta_1, .fixture-container, main',
+      contentLabel: 'Fixture Liga Profesional Argentina',
+      maxContentLength: 5000,
+      llmFallback: true,
+      llmSearchQuery: 'fixture completo Liga Profesional Argentina fútbol fecha actual resultados y próximos partidos',
+    },
+  });
+
+  sources.push({
     id: 'default-social-twitter',
     name: 'Twitter/X Argentina',
     type: 'social',

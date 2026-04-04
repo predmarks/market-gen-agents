@@ -1,8 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { db } from '@/db/client';
-import { markets, config } from '@/db/schema';
+import { markets } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { getOwnedAddresses } from '@/lib/owned-addresses';
 import { validateChainId, getBasescanUrl } from '@/lib/chains';
 import { fetchMarketsWithUnredeemedWinners } from '@/lib/indexer';
 import { RedemptionsView } from './_components/RedemptionsView';
@@ -18,8 +19,7 @@ export default async function RedemptionsPage({ searchParams }: Props) {
   const basescanUrl = getBasescanUrl(chainId);
 
   // Load owned addresses from config
-  const [configRow] = await db.select().from(config).where(eq(config.key, 'owned_addresses'));
-  const ownedAddresses: string[] = configRow?.value ? JSON.parse(configRow.value) : [];
+  const ownedAddresses = await getOwnedAddresses();
 
   // Fetch unredeemed winners from subgraph
   let summaries: Awaited<ReturnType<typeof fetchMarketsWithUnredeemedWinners>> = [];

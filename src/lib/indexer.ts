@@ -280,6 +280,59 @@ export async function fetchMarketsWithUnredeemedWinners(
   }));
 }
 
+// --- Owned participants per market ---
+
+const OWNED_POSITIONS_QUERY = `
+  query OwnedPositions($limit: Int!, $skip: Int!, $accounts: [String!]!) {
+    accountPositions(
+      first: $limit
+      skip: $skip
+      where: { account_in: $accounts, shares_gt: "0" }
+    ) {
+      market { id }
+      account
+    }
+  }
+`;
+
+/**
+ * Fetch how many owned addresses participate in each market.
+ * Returns a Map of marketAddress (lowercase) -> distinct owned participant count.
+ */
+export async function fetchOwnedParticipantsByMarket(
+  chainId: number,
+  ownedAddresses: string[],
+): Promise<Map<string, number>> {
+  if (ownedAddresses.length === 0) return new Map();
+
+  const accounts = ownedAddresses.map((a) => a.toLowerCase());
+  const all: { market: { id: string }; account: string }[] = [];
+  let skip = 0;
+
+  while (true) {
+    const { accountPositions } = await queryIndexer<{
+      accountPositions: { market: { id: string }; account: string }[];
+    }>(chainId, OWNED_POSITIONS_QUERY, { limit: PAGE_SIZE, skip, accounts });
+    all.push(...accountPositions);
+    if (accountPositions.length < PAGE_SIZE) break;
+    skip += PAGE_SIZE;
+  }
+
+  // Group by market, count distinct accounts
+  const byMarket = new Map<string, Set<string>>();
+  for (const p of all) {
+    const key = p.market.id.toLowerCase();
+    if (!byMarket.has(key)) byMarket.set(key, new Set());
+    byMarket.get(key)!.add(p.account.toLowerCase());
+  }
+
+  const result = new Map<string, number>();
+  for (const [marketAddr, accounts] of byMarket) {
+    result.set(marketAddr, accounts.size);
+  }
+  return result;
+}
+
 export async function fetchOnchainMarkets(chainId: number, options?: FetchMarketsOptions): Promise<OnchainMarket[]> {
   const all: OnchainMarket[] = [];
   let skip = 0;

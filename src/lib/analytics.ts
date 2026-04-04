@@ -47,6 +47,7 @@ export async function getMarketAnalytics(tz: string = 'America/Argentina/Buenos_
       category: markets.category,
       volume: markets.volume,
       participants: markets.participants,
+      ownedParticipants: markets.ownedParticipants,
       createdAt: markets.createdAt,
       status: markets.status,
     })
@@ -66,7 +67,7 @@ export async function getMarketAnalytics(tz: string = 'America/Argentina/Buenos_
 
   for (const m of publishedMarkets) {
     const vol = parseVolume(m.volume);
-    const parts = m.participants ?? 0;
+    const parts = Math.max(0, (m.participants ?? 0) - (m.ownedParticipants ?? 0));
 
     totalVolume += vol;
     totalParticipants += parts;

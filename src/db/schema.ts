@@ -44,6 +44,7 @@ export const markets = pgTable(
     onchainAddress: varchar('onchain_address', { length: 42 }),
     volume: varchar('volume', { length: 40 }),
     participants: integer('participants'),
+    ownedParticipants: integer('owned_participants').default(0),
     pendingBalance: varchar('pending_balance', { length: 40 }),
     chainId: integer('chain_id').notNull().default(8453),
   },

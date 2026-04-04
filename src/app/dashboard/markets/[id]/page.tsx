@@ -12,6 +12,7 @@ import { REPORTER_ADDRESSES as REPORTER_ADDRESSES_PUBLIC } from '@/lib/contracts
 import { fetchOnchainMarketData, fetchMarketResult } from '@/lib/onchain';
 import { fetchOnchainMarkets, fetchUnredeemedPositions } from '@/lib/indexer';
 import type { UnredeemedPosition } from '@/lib/indexer';
+import { getOwnedAddresses } from '@/lib/owned-addresses';
 import { StatusBadge } from '../../_components/StatusBadge';
 import { TimingSafetyIndicator } from '../../_components/TimingSafetyIndicator';
 import { MarketActions } from './_components/MarketActions';
@@ -140,6 +141,15 @@ export default async function MarketDetailPage({ params }: Props) {
         resolvedTo,
       );
     } catch { /* indexer failure — skip */ }
+  }
+
+  // Filter out owned addresses from unredeemed positions
+  if (unredeemedPositions.length > 0) {
+    const ownedAddresses = await getOwnedAddresses();
+    if (ownedAddresses.length > 0) {
+      const ownedSet = new Set(ownedAddresses);
+      unredeemedPositions = unredeemedPositions.filter((p) => !ownedSet.has(p.account.toLowerCase()));
+    }
   }
 
   const deployable = toDeployableMarket(market as unknown as Market);
@@ -471,7 +481,7 @@ export default async function MarketDetailPage({ params }: Props) {
               {market.participants != null && (
                 <div>
                   <span className="text-gray-400 text-xs">Participantes</span>
-                  <p className="font-medium text-gray-700">{market.participants}</p>
+                  <p className="font-medium text-gray-700">{Math.max(0, (market.participants ?? 0) - (market.ownedParticipants ?? 0))}</p>
                 </div>
               )}
             </div>

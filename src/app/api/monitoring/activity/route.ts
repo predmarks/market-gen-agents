@@ -142,7 +142,7 @@ export async function GET(request: NextRequest) {
       stepTimestamp,
       stale,
       volume: m.volume,
-      participants: m.participants,
+      participants: Math.max(0, (m.participants ?? 0) - (m.ownedParticipants ?? 0)),
       endTimestamp: m.endTimestamp,
       outcome: m.outcome,
       pendingBalance: m.pendingBalance,

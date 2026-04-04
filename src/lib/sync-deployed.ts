@@ -1,7 +1,8 @@
 import { db } from '@/db/client';
 import { markets } from '@/db/schema';
 import { eq, and, isNotNull, isNull, sql } from 'drizzle-orm';
-import { fetchOnchainMarkets } from './indexer';
+import { fetchOnchainMarkets, fetchOwnedParticipantsByMarket } from './indexer';
+import { getOwnedAddresses } from './owned-addresses';
 import { expandMarket } from './expand-market';
 import { fetchOnchainMarketData, fetchPendingBalances } from './onchain';
 import { matchMarketsToTopics } from './match-market-topic';
@@ -29,6 +30,8 @@ export async function syncMarketStats(chainId: number = MAINNET_CHAIN_ID): Promi
   updated: number;
 }> {
   const onchainMarkets = await fetchOnchainMarkets(chainId);
+  const ownedAddresses = await getOwnedAddresses();
+  const ownedMap = await fetchOwnedParticipantsByMarket(chainId, ownedAddresses);
   const now = Math.floor(Date.now() / 1000);
   let created = 0;
   let updated = 0;
@@ -56,6 +59,7 @@ export async function syncMarketStats(chainId: number = MAINNET_CHAIN_ID): Promi
         .set({
           volume: om.volume,
           participants: om.participants,
+          ownedParticipants: ownedMap.get(om.id.toLowerCase()) ?? 0,
           ...(preserveStatus ? {} : { status }),
         })
         .where(eq(markets.id, existing.id));
@@ -87,6 +91,7 @@ export async function syncMarketStats(chainId: number = MAINNET_CHAIN_ID): Promi
             expectedResolutionDate: toDateString(om.endTimestamp),
             volume: om.volume,
             participants: om.participants,
+            ownedParticipants: ownedMap.get(om.id.toLowerCase()) ?? 0,
             status,
             chainId,
           })
@@ -111,6 +116,7 @@ export async function syncMarketStats(chainId: number = MAINNET_CHAIN_ID): Promi
           expectedResolutionDate: toDateString(om.endTimestamp),
           volume: om.volume,
           participants: om.participants,
+          ownedParticipants: ownedMap.get(om.id.toLowerCase()) ?? 0,
           status,
           chainId,
           sourceContext,
@@ -159,6 +165,8 @@ export async function syncDeployedMarkets(chainId: number = MAINNET_CHAIN_ID): P
   resolutionTriggered: number;
 }> {
   const onchainMarkets = await fetchOnchainMarkets(chainId);
+  const ownedAddrs = await getOwnedAddresses();
+  const ownedMap = await fetchOwnedParticipantsByMarket(chainId, ownedAddrs);
   const now = Math.floor(Date.now() / 1000);
   let created = 0;
   let updated = 0;
@@ -195,6 +203,7 @@ export async function syncDeployedMarkets(chainId: number = MAINNET_CHAIN_ID): P
             resolvedAt: new Date(),
             volume: om.volume,
             participants: om.participants,
+            ownedParticipants: ownedMap.get(om.id.toLowerCase()) ?? 0,
           }).where(eq(markets.id, existing.id));
 
           logActivity('market_resolved_onchain', {
@@ -212,6 +221,7 @@ export async function syncDeployedMarkets(chainId: number = MAINNET_CHAIN_ID): P
         await db.update(markets).set({
           volume: om.volume,
           participants: om.participants,
+          ownedParticipants: ownedMap.get(om.id.toLowerCase()) ?? 0,
         }).where(eq(markets.id, existing.id));
         updated++;
       } else {
@@ -238,6 +248,7 @@ export async function syncDeployedMarkets(chainId: number = MAINNET_CHAIN_ID): P
             onchainId: om.onchainId, onchainAddress: om.id, category: om.category,
             endTimestamp: om.endTimestamp, expectedResolutionDate,
             volume: om.volume, participants: om.participants,
+            ownedParticipants: ownedMap.get(om.id.toLowerCase()) ?? 0,
             status: 'closed', outcome: outcome ?? undefined,
             outcomes: outcomes.length > 0 ? outcomes : undefined,
             resolvedAt: new Date(), chainId,
@@ -250,6 +261,7 @@ export async function syncDeployedMarkets(chainId: number = MAINNET_CHAIN_ID): P
             title: om.name, description: '', resolutionCriteria: '', resolutionSource: '',
             category: om.category, endTimestamp: om.endTimestamp, expectedResolutionDate,
             volume: om.volume, participants: om.participants,
+            ownedParticipants: ownedMap.get(om.id.toLowerCase()) ?? 0,
             status: 'closed', outcome: outcome ?? undefined,
             outcomes: outcomes.length > 0 ? outcomes : undefined,
             resolvedAt: new Date(), chainId, sourceContext,
@@ -293,6 +305,7 @@ export async function syncDeployedMarkets(chainId: number = MAINNET_CHAIN_ID): P
           endTimestamp: om.endTimestamp,
           volume: om.volume,
           participants: om.participants,
+          ownedParticipants: ownedMap.get(om.id.toLowerCase()) ?? 0,
           onchainAddress: om.id,
           ...(!existing.expectedResolutionDate ? { expectedResolutionDate } : {}),
           ...(preserveStatus ? {} : { status }),
@@ -323,6 +336,7 @@ export async function syncDeployedMarkets(chainId: number = MAINNET_CHAIN_ID): P
           onchainId: om.onchainId, onchainAddress: om.id, category: om.category,
           endTimestamp: om.endTimestamp, expectedResolutionDate,
           volume: om.volume, participants: om.participants,
+          ownedParticipants: ownedMap.get(om.id.toLowerCase()) ?? 0,
           status, chainId,
         }).where(eq(markets.id, titleMatch.id));
         inserted = titleMatch;
@@ -338,6 +352,7 @@ export async function syncDeployedMarkets(chainId: number = MAINNET_CHAIN_ID): P
           title: om.name, description: '', resolutionCriteria: '', resolutionSource: '',
           category: om.category, endTimestamp: om.endTimestamp, expectedResolutionDate,
           volume: om.volume, participants: om.participants,
+          ownedParticipants: ownedMap.get(om.id.toLowerCase()) ?? 0,
           status, chainId, sourceContext,
         }).returning({ id: markets.id });
         inserted = created_;

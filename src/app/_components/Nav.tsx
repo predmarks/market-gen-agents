@@ -75,7 +75,6 @@ export function Nav() {
           {navLink('/dashboard/signals', 'Señales')}
           {navLink('/dashboard/rules', 'Reglas')}
           {navLink('/dashboard/activity', 'Log')}
-          {navLink('/dashboard/analytics', 'Analytics')}
           {navLink('/dashboard/redemptions', 'Retiros')}
           {navLink('/dashboard/usage', 'Uso')}
         </div>

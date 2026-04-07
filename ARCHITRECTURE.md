@@ -337,8 +337,8 @@ export const HARD_RULES: Rule[] = [
   {
     id: 'H3',
     type: 'hard',
-    description: 'Both Si and No must be plausible outcomes',
-    check: `Evaluate whether both outcomes are genuinely possible. Flag if one
+    description: 'All listed outcomes must be plausible',
+    check: `Evaluate whether all outcomes are genuinely possible. Flag if one
       outcome is >95% likely based on current data. CRITICAL: verify any
       numbers mentioned against current real-world data — do NOT trust
       the candidate's numbers at face value.`
@@ -1106,7 +1106,7 @@ Markets past `endTimestamp` where the YES condition was not met → auto-flag as
 ```
 Framework:         Next.js 16 (App Router) + TypeScript strict + Tailwind v4
 Deployment:        Vercel
-Database:          Supabase Postgres (RLS enabled on all 15 tables)
+Database:          Supabase Postgres (RLS enabled on all 16 tables)
 ORM:               Drizzle (postgres.js driver)
 Job orchestration: Inngest (step functions, throttle, cancelOn, concurrency, cron)
 LLM:               Claude API (claude-sonnet-4-20250514 default, claude-opus-4-20250514 configurable)
@@ -1157,7 +1157,7 @@ predmarks-market-agents/
 │   │   ├── _components/                      # Shared: Nav, MiniChat, MarketList, Markdown, etc.
 │   │   ├── login/                            # Login page + server actions
 │   │   ├── api/
-│   │   │   ├── chat/route.ts                 # MiniChat API (44 tools, multi-turn)
+│   │   │   ├── chat/route.ts                 # MiniChat API (34 tools, multi-turn)
 │   │   │   ├── markets/
 │   │   │   │   ├── route.ts                  # GET list, POST create
 │   │   │   │   └── [id]/
@@ -1217,7 +1217,7 @@ predmarks-market-agents/
 │   │       │   ├── page.tsx                  # Market detail + actions
 │   │       │   └── _components/              # MarketActions, ResolutionActions, OnchainActions, etc.
 │   │       ├── activity/page.tsx
-│   │       ├── analytics/page.tsx            # Charts + metrics
+│   │       ├── redemptions/page.tsx           # Unredeemed winners + redemptions
 │   │       ├── usage/page.tsx                # LLM token usage
 │   │       ├── rules/page.tsx                # Rule management
 │   │       └── monitoring/page.tsx
@@ -1251,7 +1251,7 @@ predmarks-market-agents/
 │   │   ├── scoring.ts                        # Weights and thresholds
 │   │   └── sources.ts                        # Signal source config (DB-backed + fallback)
 │   ├── db/
-│   │   ├── schema.ts                         # 15 tables (see schema section)
+│   │   ├── schema.ts                         # 16 tables (see schema section)
 │   │   ├── types.ts                          # All shared types
 │   │   └── client.ts                         # Drizzle client (postgres.js driver)
 │   ├── lib/
@@ -1305,7 +1305,7 @@ predmarks-market-agents/
 
 | Job ID | Cron | Purpose |
 |--------|------|---------|
-| `cron-signal-ingestion` | `0 */12 * * *` | Every 12h: triggers full ingestion pipeline |
+| `cron-signal-ingestion` | `0 0 * * *` | Daily at midnight: triggers full ingestion pipeline |
 | `cron-signal-ingestion-light` | `0 * * * *` | Every hour: triggers light ingestion (fetch only, no coalescence) |
 | `cron-resolution-check` | `0 */6 * * *` | Every 6h: finds eligible markets and dispatches resolution checks |
 
@@ -1378,7 +1378,7 @@ Topic management interface:
 - `/dashboard/resolution` — markets in `in_resolution` status with resolution suggestions, confirm/dismiss actions
 - `/dashboard/archive` — archived markets with search/filter
 - `/dashboard/activity` — system-wide activity log (paginated)
-- `/dashboard/analytics` — charts and metrics (dynamic import)
+- `/dashboard/redemptions` — unredeemed winners tracking and redemptions
 - `/dashboard/usage` — LLM token usage by operation/model with daily charts
 - `/dashboard/rules` — rule management (edit hard/soft rules, enable/disable)
 - `/dashboard/monitoring` — monitoring dashboard
@@ -1402,7 +1402,7 @@ Topic info + linked signals + generation history:
 
 Events are logged via `logMarketEvent()` at each pipeline step and API action. Stale detection: processing markets with no events in 5+ min are flagged as "Estancado" with a resume button.
 
-### API endpoints (39 routes)
+### API endpoints (40 routes)
 
 **Markets**
 
@@ -1487,7 +1487,7 @@ Events are logged via `logMarketEvent()` at each pipeline step and API action. S
 
 ## Database schema
 
-15 tables, all with RLS enabled (`src/db/schema.ts`):
+16 tables, all with RLS enabled (`src/db/schema.ts`):
 
 | Table | Purpose |
 |-------|---------|
@@ -1534,11 +1534,11 @@ A context-aware AI copilot sidebar available on every dashboard page (`src/app/_
 ### Architecture
 
 - **Frontend**: resizable sidebar (280-600px), multi-turn conversation, activity card display, background job polling
-- **Backend**: Claude with 44 tools in a multi-turn loop (up to 20 turns per message)
+- **Backend**: Claude with 34 tools in a multi-turn loop (up to 20 turns per message)
 - **Persistence**: conversations stored in `conversations` table, scoped by contextType + contextId
 - **Context detection**: automatically detects context from URL (topic, market, signal, or global)
 
-### Tool categories (44 tools)
+### Tool categories (34 tools)
 
 | Category | Tools | Behavior |
 |----------|-------|----------|
@@ -1726,10 +1726,10 @@ rather than running on a fixed schedule.
 ### Phase 5: Polish — PARTIAL
 - ✅ Cost tracking and usage dashboard (`/dashboard/usage`)
 - ✅ Multi-outcome market support (H11, H12 rules added)
-- ✅ MiniChat copilot with 44 tools (global, topic, market, signal contexts)
+- ✅ MiniChat copilot with 34 tools (global, topic, market, signal contexts)
 - ✅ Onchain integration (deploy, resolve, withdraw, sync)
 - ✅ DB-backed rules and signal sources (editable from dashboard and chat)
-- ✅ Analytics dashboard (`/dashboard/analytics`)
+- ✅ Redemptions dashboard (`/dashboard/redemptions`)
 - ✅ Prompt tuning from real results (resolution feedback + sourcer rejection history + conversational feedback)
 - TODO: Discord notifications (emergencies, resolution events)
 - TODO: Newsletter system for market updates to users

@@ -19,6 +19,7 @@
     "cheerio": "^1.2.0",
     "drizzle-orm": "^0.45.1",
     "inngest": "^3.52.6",
+    "lucide-react": "^1.7.0",
     "marked": "^18.0.0",
     "next": "16.1.6",
     "openai": "^6.27.0",

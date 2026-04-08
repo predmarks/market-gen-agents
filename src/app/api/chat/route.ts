@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { db } from '@/db/client';
-import { topics, markets, signals, conversations, topicSignals, globalFeedback, resolutionFeedback, rules as rulesTable, activityLog, config, signalSources } from '@/db/schema';
+import { topics, markets, signals, conversations, topicSignals, globalFeedback, resolutionFeedback, rules as rulesTable, activityLog, config, signalSources, newsletters } from '@/db/schema';
 import { eq, desc, sql, and, gt, inArray } from 'drizzle-orm';
 import { rescoreTopic } from '@/agents/sourcer/scorer';
 import { loadRules } from '@/config/rules';
@@ -16,6 +16,7 @@ import { loadGenerationPrompt, saveGenerationPrompt } from '@/agents/sourcer/gen
 import { loadResolutionPrompt, saveResolutionPrompt } from '@/agents/resolver/evaluator';
 import { syncDeployedMarkets } from '@/lib/sync-deployed';
 import { revalidatePath } from 'next/cache';
+import { markdownToEmailHtml } from '@/lib/markdown-to-html';
 
 const client = new Anthropic({ maxRetries: 5 });
 
@@ -42,7 +43,7 @@ interface ChatMessage {
   activityIds?: string[];
 }
 
-type ContextType = 'topic' | 'market' | 'signal' | 'global';
+type ContextType = 'topic' | 'market' | 'signal' | 'newsletter' | 'global';
 
 // --- System prompt builders ---
 
@@ -55,7 +56,8 @@ PERSONALIDAD:
 
 OPERACIONES BARATAS (ejecutar sin pedir confirmación):
 - Consultas (lookup_topic, lookup_market, lookup_signals): usá proactivamente cuando el usuario menciona un tema o mercado.
-- Modificaciones directas (update_topic, update_market, save_feedback, link_signal_to_topic, add_angle): ejecutá inmediatamente.
+- Modificaciones directas (update_topic, update_market, update_newsletter, save_feedback, link_signal_to_topic, add_angle): ejecutá inmediatamente.
+- Newsletter (lookup_newsletter, update_newsletter): para editar newsletters SIEMPRE usá update_newsletter. Nunca imprimas el contenido modificado como texto — guardalo con la herramienta.
 - Para feedback: guardalo con save_feedback. Si tiene valor general, extraé aprendizajes globales.
 
 OPERACIONES COSTOSAS (sugerir pero SIEMPRE pedir confirmación):
@@ -228,6 +230,21 @@ async function buildSignalContext(signalId: string): Promise<string> {
 - Score: ${signal.score ?? 'Sin score'}
 - Publicada: ${signal.publishedAt.toISOString().split('T')[0]}
 ${signal.summary ? `- Resumen: ${signal.summary}` : ''}`;
+}
+
+async function buildNewsletterContext(newsletterId: string): Promise<string> {
+  const [nl] = await db.select().from(newsletters).where(eq(newsletters.id, newsletterId));
+  if (!nl) return 'Newsletter no encontrado.';
+
+  return `CONTEXTO: NEWSLETTER (ID: ${nl.id})
+Subject: ${nl.subjectLine}
+Fecha: ${nl.date} | Status: ${nl.status}
+
+Para modificar este newsletter, usá update_newsletter con los campos que quieras cambiar (subjectLine, markdown, status).
+No imprimas el contenido modificado como texto — guardalo directamente con la herramienta.
+
+Contenido actual (markdown):
+${nl.markdown}`;
 }
 
 // --- Global data summaries ---
@@ -683,6 +700,31 @@ const TOOLS: Anthropic.Tool[] = [
         config: { type: 'object' as const },
       },
       required: ['sourceId'],
+    },
+  },
+  {
+    name: 'lookup_newsletter',
+    description: 'Get full details of a newsletter (subject, markdown content, date, status, featured markets, resolutions).',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        newsletterId: { type: 'string' as const, description: 'Newsletter UUID' },
+      },
+      required: ['newsletterId'],
+    },
+  },
+  {
+    name: 'update_newsletter',
+    description: 'Modify a newsletter\'s content — update subject line, markdown body, or status (draft/sent).',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        newsletterId: { type: 'string' as const, description: 'Newsletter UUID' },
+        subjectLine: { type: 'string' as const, description: 'Email subject line' },
+        markdown: { type: 'string' as const, description: 'Full newsletter body in markdown' },
+        status: { type: 'string' as const, enum: ['draft', 'sent'], description: 'Newsletter status' },
+      },
+      required: ['newsletterId'],
     },
   },
 ];
@@ -1242,6 +1284,51 @@ async function executeTool(block: Anthropic.ToolUseBlock, contextType: ContextTy
     return `Fuente ${sourceId} actualizada.`;
   }
 
+  if (block.name === 'lookup_newsletter') {
+    const { newsletterId: providedId } = block.input as { newsletterId: string };
+    const newsletterId = (contextType === 'newsletter' && contextId) ? contextId : providedId;
+    const [nl] = await db.select().from(newsletters).where(eq(newsletters.id, newsletterId));
+    if (!nl) return 'Newsletter no encontrado.';
+    const meta = (nl.metadata ?? {}) as Record<string, unknown>;
+    const featured = (meta.featuredMarkets as { title: string; whyNow: string }[]) ?? [];
+    const resolved = (meta.resolvedEntries as { title: string; outcome: string }[]) ?? [];
+    const parts = [
+      `Subject: ${nl.subjectLine}`,
+      `Fecha: ${nl.date}`,
+      `Status: ${nl.status}`,
+      '',
+      '--- Contenido (markdown) ---',
+      nl.markdown,
+    ];
+    if (featured.length > 0) {
+      parts.push('', `--- Mercados destacados (${featured.length}) ---`);
+      featured.forEach((m, i) => parts.push(`${i + 1}. ${m.title}: ${m.whyNow}`));
+    }
+    if (resolved.length > 0) {
+      parts.push('', `--- Resoluciones (${resolved.length}) ---`);
+      resolved.forEach((r) => parts.push(`• ${r.title} → ${r.outcome}`));
+    }
+    return parts.join('\n');
+  }
+
+  if (block.name === 'update_newsletter') {
+    const { newsletterId: providedId, ...fields } = block.input as Record<string, unknown>;
+    const newsletterId = (contextType === 'newsletter' && contextId) ? contextId : providedId as string;
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (fields.subjectLine !== undefined) updates.subjectLine = fields.subjectLine;
+    if (fields.markdown !== undefined) {
+      updates.markdown = fields.markdown;
+      updates.html = markdownToEmailHtml(fields.markdown as string);
+    }
+    if (fields.status !== undefined) updates.status = fields.status;
+    if (Object.keys(updates).length <= 1) return 'Sin cambios.';
+    const [updated] = await db.update(newsletters).set(updates).where(eq(newsletters.id, newsletterId)).returning({ id: newsletters.id, subjectLine: newsletters.subjectLine });
+    if (!updated) return 'Newsletter no encontrado.';
+    await logActivity('newsletter_updated', { entityType: 'newsletter', entityId: newsletterId, entityLabel: updated.subjectLine ?? undefined, detail: { fields: Object.keys(updates).filter(k => k !== 'updatedAt') }, source: 'chat' });
+    revalidatePath(`/dashboard/newsletter/${newsletterId}`);
+    return `Newsletter actualizado: ${Object.keys(updates).filter(k => k !== 'updatedAt').join(', ')}`;
+  }
+
   return 'Tool no reconocido.';
 }
 
@@ -1312,6 +1399,8 @@ export async function POST(request: NextRequest) {
     entityContext = await buildMarketContext(contextId, tz);
   } else if (contextType === 'signal' && contextId) {
     entityContext = await buildSignalContext(contextId);
+  } else if (contextType === 'newsletter' && contextId) {
+    entityContext = await buildNewsletterContext(contextId);
   }
 
   // Load global feedback as generation guidelines

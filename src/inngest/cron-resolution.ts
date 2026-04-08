@@ -14,12 +14,13 @@ export const cronResolution = inngest.createFunction(
     const eligible = await step.run('find-eligible', async () => {
       // Open markets closing within 72h
       const openMarkets = await db
-        .select({ id: markets.id, endTimestamp: markets.endTimestamp })
+        .select({ id: markets.id, endTimestamp: markets.endTimestamp, expectedResolutionDate: markets.expectedResolutionDate })
         .from(markets)
         .where(and(eq(markets.status, 'open'), eq(markets.chainId, MAINNET_CHAIN_ID)));
 
+      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
       const nearDeadline = openMarkets
-        .filter((m) => m.endTimestamp <= in72h)
+        .filter((m) => m.endTimestamp <= in72h && (!m.expectedResolutionDate || m.expectedResolutionDate <= today))
         .map((m) => m.id);
 
       // In-resolution markets without a resolution suggestion yet (mainnet only)

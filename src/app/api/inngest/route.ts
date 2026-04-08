@@ -11,8 +11,9 @@ import { cronIngestLight } from '@/inngest/cron-ingest-light';
 import { ingestionLightJob } from '@/inngest/ingestion-light-job';
 import { resolutionJob } from '@/inngest/resolution-job';
 import { cronResolution } from '@/inngest/cron-resolution';
+import { newsletterJob } from '@/inngest/newsletter-job';
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [reviewJob, ingestionJob, ingestionLightJob, generationJob, suggestTopicJob, researchJob, coalescenceJob, cronIngest, cronIngestLight, resolutionJob, cronResolution],
+  functions: [reviewJob, ingestionJob, ingestionLightJob, generationJob, suggestTopicJob, researchJob, coalescenceJob, cronIngest, cronIngestLight, resolutionJob, cronResolution, newsletterJob],
 });

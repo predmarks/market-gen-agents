@@ -23,7 +23,7 @@ interface Conversation {
 }
 
 interface ChatContext {
-  type: 'topic' | 'market' | 'signal' | 'global';
+  type: 'topic' | 'market' | 'signal' | 'newsletter' | 'global';
   id: string | null;
   label: string;
 }
@@ -37,9 +37,14 @@ function detectContext(pathname: string): ChatContext {
   if (marketMatch) {
     return { type: 'market', id: marketMatch[1], label: 'Mercado' };
   }
+  const newsletterMatch = pathname.match(/\/dashboard\/newsletter\/([^/]+)$/);
+  if (newsletterMatch) {
+    return { type: 'newsletter', id: newsletterMatch[1], label: 'Newsletter' };
+  }
   if (pathname === '/dashboard/topics') return { type: 'global', id: null, label: 'Temas' };
   if (pathname === '/dashboard/signals') return { type: 'global', id: null, label: 'Señales' };
   if (pathname === '/dashboard/mercados') return { type: 'global', id: null, label: 'Mercados' };
+  if (pathname === '/dashboard/newsletter') return { type: 'global', id: null, label: 'Newsletter' };
   if (pathname === '/dashboard/rules') return { type: 'global', id: null, label: 'Reglas' };
   if (pathname === '/dashboard/feedback') return { type: 'global', id: null, label: 'Feedback' };
   return { type: 'global', id: null, label: 'General' };
@@ -358,6 +363,9 @@ export function MiniChat() {
       } else {
         router.refresh();
       }
+
+      // Notify page components that chat made changes
+      window.dispatchEvent(new CustomEvent('minichat:updated'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error');
     } finally {

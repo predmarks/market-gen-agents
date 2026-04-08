@@ -5,6 +5,7 @@ import { COLLATERAL_TOKENS } from './contracts';
 
 const PRECOG_MASTER_ABI = parseAbi([
   'function markets(uint256 marketId) view returns (string name, string description, string category, string outcomes, uint256 startTimestamp, uint256 endTimestamp, address creator, address market)',
+  'function marketPrices(uint256 marketId) view returns (uint256[] buyPrices, uint256[] sellPrices)',
 ]);
 
 export interface OnchainMarketData {
@@ -107,4 +108,32 @@ export async function fetchPendingBalances(
   }
 
   return balances;
+}
+
+/**
+ * Fetch buy prices for a market's outcomes from the PrecogMaster contract.
+ * Returns an array of percentages (0-100) per outcome (1-indexed on-chain, mapped to 0-indexed here).
+ * USDC collateral has 6 decimals, and prices represent the cost to buy one full share (1e6 = 100%).
+ */
+export async function fetchMarketPrices(
+  onchainId: number,
+  outcomeCount: number,
+  chainId: number = MAINNET_CHAIN_ID,
+): Promise<number[]> {
+  const client = getClient(chainId);
+  const [buyPrices] = await client.readContract({
+    address: getMasterAddress(chainId),
+    abi: PRECOG_MASTER_ABI,
+    functionName: 'marketPrices',
+    args: [BigInt(onchainId)],
+  });
+
+  // buyPrices is 1-indexed (index 0 unused), values in collateral decimals (6 for USDC)
+  // Convert to percentages: price / 1e6 * 100
+  const prices: number[] = [];
+  for (let i = 1; i <= outcomeCount; i++) {
+    const raw = buyPrices[i] ?? BigInt(0);
+    prices.push(Math.round(Number(raw) / 1e4)); // 1e6 * 100 / 1e4 = percentage
+  }
+  return prices;
 }

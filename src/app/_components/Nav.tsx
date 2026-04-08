@@ -77,6 +77,7 @@ export function Nav() {
           {navLink('/dashboard/activity', 'Log')}
           {navLink('/dashboard/redemptions', 'Retiros')}
           {navLink('/dashboard/usage', 'Uso')}
+          {navLink('/dashboard/newsletter', 'Newsletter')}
         </div>
 
         <div className="flex items-center gap-3 shrink-0">

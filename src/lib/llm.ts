@@ -26,6 +26,7 @@ export const TOKEN_BUDGETS: Record<string, number> = {
   match_markets_topics: 2048,
   expand_market:        4096,
   content_scrape:       2048,
+  write_newsletter:    16000,
 };
 
 function resolveMaxTokens(operation?: string, explicitMax?: number): number {

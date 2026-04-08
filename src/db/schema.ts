@@ -229,6 +229,37 @@ export const resolutionFeedback = pgTable('resolution_feedback', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }).enableRLS();
 
+export const newsletters = pgTable(
+  'newsletters',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    date: varchar('date', { length: 10 }).notNull(), // YYYY-MM-DD
+    status: varchar('status', { length: 20 }).notNull().default('draft'),
+    subjectLine: text('subject_line').notNull(),
+    markdown: text('markdown').notNull(),
+    html: text('html').notNull(),
+    featuredMarketIds: jsonb('featured_market_ids').notNull().default([]).$type<string[]>(),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('newsletters_date_idx').on(table.date),
+    index('newsletters_status_idx').on(table.status),
+  ],
+).enableRLS();
+
+export const newsletterRuns = pgTable('newsletter_runs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  status: varchar('status', { length: 20 }).notNull().default('running'),
+  currentStep: varchar('current_step', { length: 30 }).notNull().default('load-open-markets'),
+  steps: jsonb('steps').notNull().default([]).$type<SourcingStep[]>(),
+  error: text('error'),
+  newsletterId: uuid('newsletter_id'),
+  startedAt: timestamp('started_at').defaultNow().notNull(),
+  completedAt: timestamp('completed_at'),
+}).enableRLS();
+
 export const signalSources = pgTable('signal_sources', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: varchar('name', { length: 100 }).notNull(),

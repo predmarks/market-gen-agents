@@ -19,7 +19,7 @@ import {
 import {
   Zap, BookOpen, TrendingUp, Wallet, Mail,
   Radio, Scale, Activity, BarChart3, LineChart,
-  Settings, ChevronDown, Moon, Sun,
+  Settings, ChevronDown, Moon, Sun, User, LogOut,
   type LucideProps,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -148,12 +148,28 @@ export function Nav() {
             <span className="sr-only">Cambiar tema</span>
           </Button>
 
-          <WalletButton />
-          <form action={logout}>
-            <Button type="submit" variant="ghost" size="sm" className="text-muted-foreground">
-              Salir
-            </Button>
-          </form>
+          {/* User dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              openOnHover
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground outline-none"
+            >
+              <User size={16} />
+              <ChevronDown size={14} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={8}>
+              <div className="px-2 py-1.5">
+                <WalletButton />
+              </div>
+              <DropdownMenuItem
+                onClick={() => document.querySelector<HTMLFormElement>('#logout-form')?.requestSubmit()}
+              >
+                <LogOut size={16} />
+                Salir
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <form id="logout-form" action={logout} className="hidden" />
         </div>
       </div>
     </nav>

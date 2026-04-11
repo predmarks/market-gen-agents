@@ -95,7 +95,7 @@ export default async function TopicDetailPage({ params }: Props) {
     .limit(50);
 
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-4xl mx-auto">
         <Link href="/dashboard/topics" className="text-sm text-muted-foreground hover:text-foreground mb-4 inline-block">
           &larr; Volver
         </Link>

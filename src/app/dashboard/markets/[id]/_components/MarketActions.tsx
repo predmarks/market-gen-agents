@@ -3,7 +3,6 @@
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import type { MarketStatus, Review, Iteration } from '@/db/types';
-import { ARCHIVABLE_STATUSES } from '@/db/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -12,7 +11,6 @@ interface MarketActionsProps {
   status: MarketStatus;
   review: Review | null;
   iterations?: Iteration[] | null;
-  isArchived: boolean;
 }
 
 const actionStyles = {
@@ -23,7 +21,7 @@ const actionStyles = {
   slate: 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300 dark:hover:bg-slate-800',
 } as const;
 
-export function MarketActions({ marketId, status, iterations, isArchived }: MarketActionsProps) {
+export function MarketActions({ marketId, status, iterations }: MarketActionsProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -122,27 +120,6 @@ export function MarketActions({ marketId, status, iterations, isArchived }: Mark
           </Button>
         )}
 
-        {(ARCHIVABLE_STATUSES as readonly string[]).includes(status) && !isArchived && (
-          <Button
-            variant="outline"
-            className={cn(actionStyles.slate)}
-            disabled={loading === 'archive'}
-            onClick={() => handleAction('archive')}
-          >
-            {loading === 'archive' ? 'Procesando...' : 'Archivar'}
-          </Button>
-        )}
-
-        {isArchived && (
-          <Button
-            variant="outline"
-            className={cn(actionStyles.slate)}
-            disabled={loading === 'unarchive'}
-            onClick={() => handleAction('unarchive')}
-          >
-            {loading === 'unarchive' ? 'Procesando...' : 'Desarchivar'}
-          </Button>
-        )}
       </>
       {error && <p className="text-sm text-destructive">{error}</p>}
     </>

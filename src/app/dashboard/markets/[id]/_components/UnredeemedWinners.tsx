@@ -27,7 +27,7 @@ interface Props {
 export function UnredeemedWinners({ positions, chainId }: Props) {
   if (positions.length === 0) {
     return (
-      <div className="rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30 px-4 py-3 mb-4">
+      <div className="rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30 p-4">
         <p className="text-xs text-green-700 dark:text-green-300">Todas las posiciones ganadoras fueron redimidas</p>
       </div>
     );
@@ -37,7 +37,7 @@ export function UnredeemedWinners({ positions, chainId }: Props) {
   const basescanUrl = getBasescanUrl(chainId);
 
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4 mb-4">
+    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4">
       <h4 className="text-sm font-semibold text-foreground mb-1">
         Posiciones ganadoras sin redimir
       </h4>

@@ -99,7 +99,7 @@ export async function POST(
   if (action === 'market_liquidity_withdrawn') {
     const resolution = (market.resolution as Record<string, unknown> | null) ?? {};
     const withdrawal = (resolution.withdrawal as Record<string, unknown> | null) ?? {};
-    await db.update(markets).set({
+    const updates: Record<string, unknown> = {
       resolution: {
         ...resolution,
         withdrawal: {
@@ -108,7 +108,13 @@ export async function POST(
           withdrawTxHash: detail?.txHash,
         },
       } as unknown as Resolution,
-    }).where(eq(markets.id, id));
+    };
+    // Cache withdrawn amount (detail.amount is formatted decimal like "950.00")
+    if (detail?.amount) {
+      const raw = Math.round(parseFloat(detail.amount) * 1e6);
+      if (raw > 0) updates.withdrawnAmount = raw.toString();
+    }
+    await db.update(markets).set(updates).where(eq(markets.id, id));
 
     notifyLiquidityWithdrawn({
       marketId: id,

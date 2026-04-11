@@ -343,6 +343,7 @@ export interface OwnedPositionDetail {
   outcome: number;
   shares: string;
   invested: string;
+  withdrew: string;
   isRedeemed: boolean;
 }
 
@@ -358,6 +359,7 @@ const OWNED_POSITIONS_DETAILED_QUERY = `
       outcome
       shares
       invested
+      withdrew
       isRedeemed
     }
   }
@@ -369,6 +371,7 @@ type RawOwnedPositionDetail = {
   outcome: string | number;
   shares: string;
   invested: string;
+  withdrew: string;
   isRedeemed: boolean;
 };
 
@@ -397,6 +400,7 @@ export async function fetchOwnedPositionsDetailed(
         outcome: Number(p.outcome),
         shares: p.shares,
         invested: p.invested,
+        withdrew: p.withdrew,
         isRedeemed: p.isRedeemed,
       })),
     );

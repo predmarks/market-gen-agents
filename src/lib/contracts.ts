@@ -235,6 +235,12 @@ export const MASTER_ADDRESSES: Record<number, `0x${string}`> = {
     '0x0000000000000000000000000000000000000000') as `0x${string}`,
 };
 
+// Block at which PrecogMasterV7 was deployed — no markets exist before this
+export const MASTER_DEPLOY_BLOCK: Record<number, bigint> = {
+  8453: BigInt(41072823),
+  84532: BigInt(0),
+};
+
 export const COLLATERAL_TOKENS: Record<number, `0x${string}` | null> = {
   8453: (process.env.NEXT_PUBLIC_COLLATERAL_TOKEN_BASE ?? null) as `0x${string}` | null,
   84532: (process.env.NEXT_PUBLIC_COLLATERAL_TOKEN_SEPOLIA ?? null) as `0x${string}` | null,

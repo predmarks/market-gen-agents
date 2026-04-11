@@ -312,7 +312,7 @@ export function WithdrawLiquidityButton({ marketId, onchainId, marketAddress, ch
     : 'Retirar liquidez';
 
   return (
-    <div className={`rounded-lg border p-6 ${bgColor} ${borderColor}`}>
+    <div className={`rounded-lg border p-4 ${bgColor} ${borderColor}`}>
       {/* Stepper */}
       <div className="flex items-center gap-1 mb-4">
         {steps.map((s, i) => {

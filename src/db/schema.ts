@@ -49,6 +49,7 @@ export const markets = pgTable(
     ownedParticipants: integer('owned_participants').default(0),
     pendingBalance: varchar('pending_balance', { length: 40 }),
     seededAmount: varchar('seeded_amount', { length: 40 }),
+    withdrawnAmount: varchar('withdrawn_amount', { length: 40 }),
     chainId: integer('chain_id').notNull().default(8453),
   },
   (table) => [

@@ -37,6 +37,7 @@ import { ResolutionConfirmButton, ResolutionFeedbackButton } from './_components
 import { getUserTimezone } from '@/lib/timezone';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { TableOfContents } from './_components/TableOfContents';
 
 function formatVolume(vol: string): string {
   const n = parseFloat(vol) / 1e6;
@@ -68,11 +69,17 @@ interface Props {
 export default async function MarketDetailPage({ params }: Props) {
   const { id } = await params;
   const tz = await getUserTimezone();
-  const [[market], events, activity] = await Promise.all([
+  const [[market], events] = await Promise.all([
     db.select().from(markets).where(eq(markets.id, id)),
     db.select().from(marketEvents).where(eq(marketEvents.marketId, id)).orderBy(asc(marketEvents.createdAt)),
-    db.select().from(activityLog).where(eq(activityLog.entityId, id)).orderBy(desc(activityLog.createdAt)).limit(50),
   ]);
+
+  let activity: (typeof activityLog.$inferSelect)[] = [];
+  try {
+    activity = await db.select().from(activityLog).where(eq(activityLog.entityId, id)).orderBy(desc(activityLog.createdAt)).limit(50);
+  } catch (e) {
+    console.error('Failed to fetch activity log:', e instanceof Error ? (e.cause ?? e.message) : e);
+  }
 
   if (!market) notFound();
 
@@ -196,8 +203,19 @@ export default async function MarketDetailPage({ params }: Props) {
 
   const iterations = (market.iterations as Iteration[] | null) ?? [];
 
+  const tocSections: { id: string; label: string }[] = [
+    { id: 'section-top', label: 'Inicio' },
+    ...(resolution?.suggestedOutcome ? [{ id: 'section-resolution', label: 'Resolución' }] : []),
+    ...(market.status === 'closed' && market.onchainId && market.onchainAddress ? [{ id: 'section-withdrawal', label: 'Liquidez' }] : []),
+    { id: 'section-detalles', label: 'Detalles' },
+    ...((iterations.length > 0 || review) ? [{ id: 'section-revisiones', label: 'Revisiones' }] : []),
+    ...(events.length > 0 || activity.length > 0 ? [{ id: 'section-actividad', label: 'Actividad' }] : []),
+    ...(relatedSignals.length > 0 ? [{ id: 'section-senales', label: 'Señales' }] : []),
+  ];
+
   return (
-    <div>
+    <div id="section-top" className="flex justify-center gap-8">
+    <div className="max-w-4xl flex-1 min-w-0">
       <Link
         href="/"
         className="text-sm text-muted-foreground hover:text-foreground mb-4 inline-block"
@@ -206,7 +224,7 @@ export default async function MarketDetailPage({ params }: Props) {
       </Link>
 
       {/* Market identity */}
-      <div className="flex items-start justify-between gap-4 mb-2">
+      <div className="mb-2">
         {isEditable ? (
           <EditableField
             marketId={market.id}
@@ -217,36 +235,38 @@ export default async function MarketDetailPage({ params }: Props) {
         ) : (
           <h1 className="text-xl font-bold">{market.title}</h1>
         )}
-        <div className="flex items-center gap-2 shrink-0">
-          {review?.recommendation && !(market.status === 'rejected' && review.recommendation === 'reject') && (
-            <span
-              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${RECOMMENDATION_STYLES[review.recommendation]?.color ?? ''}`}
-            >
-              {RECOMMENDATION_STYLES[review.recommendation]?.label ?? review.recommendation}
-            </span>
-          )}
-          <StatusBadge status={market.status as Market['status']} />
-        </div>
       </div>
 
-      {sourceTopics.length > 0 && (
-        <div className="flex items-center gap-2 mb-4 text-xs text-muted-foreground">
-          <span>Tema{sourceTopics.length > 1 ? 's' : ''}:</span>
-          {sourceTopics.map((t, i) => (
-            <span key={t.id}>
-              {i > 0 && ', '}
-              <Link href={`/dashboard/topics/${t.slug}`} className="text-blue-600 dark:text-blue-400 hover:underline">{t.name}</Link>
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        <StatusBadge status={market.status as Market['status']} />
+        {review?.recommendation && !(market.status === 'rejected' && review.recommendation === 'reject') && (
+          <span
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${RECOMMENDATION_STYLES[review.recommendation]?.color ?? ''}`}
+          >
+            {RECOMMENDATION_STYLES[review.recommendation]?.label ?? review.recommendation}
+          </span>
+        )}
+        {sourceTopics.length > 0 && (
+          <>
+            <Separator orientation="vertical" className="h-3" />
+            <span className="text-xs text-muted-foreground">
+              {sourceTopics.map((t, i) => (
+                <span key={t.id}>
+                  {i > 0 && ', '}
+                  <Link href={`/dashboard/topics/${t.slug}`} className="text-blue-600 dark:text-blue-400 hover:underline">{t.name}</Link>
+                </span>
+              ))}
             </span>
-          ))}
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
       {/* Outcomes */}
       {(() => {
         const outcomes = (market.outcomes as string[]) ?? ['Si', 'No'];
         const DOT_COLORS = ['bg-blue-400', 'bg-amber-400', 'bg-purple-400', 'bg-emerald-400', 'bg-rose-400', 'bg-cyan-400', 'bg-orange-400', 'bg-muted-foreground'];
         return (
-          <div className="mb-4 space-y-0.5">
+          <div className="mb-6 space-y-0.5">
             {outcomes.map((o: string, i: number) => (
               <div key={o} className="flex items-center gap-1.5">
                 <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${market.outcome === o ? 'bg-green-500' : DOT_COLORS[i % DOT_COLORS.length]}`} />
@@ -258,9 +278,11 @@ export default async function MarketDetailPage({ params }: Props) {
         );
       })()}
 
+      <div className="max-w-3xl space-y-6">
+
       {/* On-chain info */}
       {market.onchainId && (
-        <div className="mb-4 rounded-md bg-muted border border-border px-4 py-3">
+        <div id="section-onchain" className="rounded-md bg-muted border border-border p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">On-chain</span>
@@ -311,24 +333,23 @@ export default async function MarketDetailPage({ params }: Props) {
       )}
 
       {/* Actions */}
-      <div className="mb-4 flex gap-2 flex-wrap items-center">
-        <MarketActions
-          marketId={market.id}
-          status={market.status as Market['status']}
-          review={review ?? null}
-          iterations={iterations.length > 0 ? iterations : null}
-          isArchived={!!market.isArchived}
-        />
-        {market.status === 'candidate' && !market.onchainId && (
-          <DeployMarketButton marketId={market.id} />
-        )}
-      </div>
-
-      <div className="max-w-3xl">
+      {(['candidate', 'processing', 'cancelled'] as const).includes(market.status as 'candidate' | 'processing' | 'cancelled') && (
+        <div className="flex gap-2 flex-wrap items-center">
+          <MarketActions
+            marketId={market.id}
+            status={market.status as Market['status']}
+            review={review ?? null}
+            iterations={iterations.length > 0 ? iterations : null}
+          />
+          {market.status === 'candidate' && !market.onchainId && (
+            <DeployMarketButton marketId={market.id} />
+          )}
+        </div>
+      )}
 
       {/* Auto-trigger resolution check when market is in_resolution but no suggestion yet */}
       {market.status === 'in_resolution' && (!resolution || !resolution.suggestedOutcome) && (
-        <div className="mb-6 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-6">
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
           <CheckResolutionTrigger marketId={market.id} checkingAt={resolution?.checkingAt} />
           <SuggestResolutionButton marketId={market.id} outcomes={(market.outcomes as string[]) ?? ['Si', 'No']} />
         </div>
@@ -361,7 +382,11 @@ export default async function MarketDetailPage({ params }: Props) {
         const bgColor = allDone ? 'bg-green-50 dark:bg-green-900/20' : 'bg-amber-50 dark:bg-amber-900/20';
 
         return (
-          <div className={`mb-6 rounded-lg border p-6 ${bgColor} ${borderColor}`}>
+          <details id="section-resolution" open>
+          <Card>
+          <CardContent>
+          <summary className="text-lg font-bold cursor-pointer list-none">Resolución</summary>
+          <div className={`mt-4 rounded-lg border p-4 ${bgColor} ${borderColor}`}>
             {/* Stepper */}
             <div className="flex items-center gap-1 mb-4">
               {steps.map((s, i) => (
@@ -463,6 +488,9 @@ export default async function MarketDetailPage({ params }: Props) {
               </div>
             )}
           </div>
+          </CardContent>
+          </Card>
+          </details>
         );
       })()}
 
@@ -474,7 +502,11 @@ export default async function MarketDetailPage({ params }: Props) {
           : undefined;
 
         return (
-          <div className="mb-6">
+          <details id="section-withdrawal" open>
+          <Card>
+          <CardContent>
+          <summary className="text-lg font-bold cursor-pointer list-none">Liquidez</summary>
+          <div className="mt-4 space-y-6">
             <UnredeemedWinners positions={unredeemedPositions} chainId={market.chainId} />
             <WithdrawLiquidityButton
               marketId={market.id}
@@ -486,23 +518,26 @@ export default async function MarketDetailPage({ params }: Props) {
               hasUnredeemedWinners={unredeemedPositions.length > 0}
             />
           </div>
+          </CardContent>
+          </Card>
+          </details>
         );
       })()}
 
-      <Card className="p-6">
-        <CardContent className="p-0">
-
-        {/* Pending pipeline suggestion */}
-        {market.pendingSuggestion && (
+      {/* Pending pipeline suggestion */}
+      {market.pendingSuggestion && (
+        <div>
           <PendingSuggestion
             marketId={market.id}
             current={marketToSnapshot(market)}
             suggestion={market.pendingSuggestion as MarketSnapshot}
           />
-        )}
+        </div>
+      )}
 
-        {/* Diff card: local vs onchain */}
-        {market.onchainId && (
+      {/* Diff card: local vs onchain */}
+      {market.onchainId && (
+        <div>
           <OnchainActions
             marketId={market.id}
             onchainId={Number(market.onchainId)}
@@ -513,14 +548,14 @@ export default async function MarketDetailPage({ params }: Props) {
             endTimestamp={market.endTimestamp}
             onchainData={onchainData}
           />
-        )}
+        </div>
+      )}
 
-        <details open className="group">
-          <summary className="text-sm font-medium text-muted-foreground cursor-pointer list-none flex items-center gap-1 mb-3">
-            <span className="text-[10px] text-muted-foreground/60 group-open:rotate-90 transition-transform">&#9654;</span>
-            Detalles
-          </summary>
-          <div className="space-y-4">
+      <details id="section-detalles" open>
+        <Card>
+        <CardContent>
+          <summary className="text-lg font-bold cursor-pointer list-none">Detalles</summary>
+          <div className="mt-4 space-y-4">
             <Section title="Categoría">
               <span>{market.category}</span>
               <span className="mx-2">&middot;</span>
@@ -597,12 +632,12 @@ export default async function MarketDetailPage({ params }: Props) {
               </Section>
             )}
           </div>
-        </details>
-        <div className="mt-4">
-          <CopyJsonButton json={JSON.stringify(deployable, null, 2)} />
-        </div>
+          <div className="mt-4">
+            <CopyJsonButton json={JSON.stringify(deployable, null, 2)} />
+          </div>
         </CardContent>
-      </Card>
+        </Card>
+      </details>
 
       {/* Reviews */}
       {(() => {
@@ -616,8 +651,9 @@ export default async function MarketDetailPage({ params }: Props) {
         if (!hasIterations && !hasReviewOnly) return null;
 
         return (
-          <details open className="mt-6">
-            <Card className="p-6">
+          <details id="section-revisiones" open>
+            <Card>
+            <CardContent>
             <summary className="text-lg font-bold cursor-pointer list-none">Revisiones</summary>
             <div className="mt-4 space-y-4">
               {hasReviewOnly && (
@@ -655,6 +691,7 @@ export default async function MarketDetailPage({ params }: Props) {
                 </details>
               ))}
             </div>
+            </CardContent>
             </Card>
           </details>
         );
@@ -672,8 +709,9 @@ export default async function MarketDetailPage({ params }: Props) {
         if (timeline.length === 0) return null;
 
         return (
-          <details open className="mt-6">
-            <Card className="p-6">
+          <details id="section-actividad" open>
+            <Card>
+            <CardContent>
             <summary className="text-lg font-bold cursor-pointer list-none">Actividad</summary>
             <div className="mt-4">
               <ul className="border-l-2 border-border ml-2 space-y-0">
@@ -701,6 +739,7 @@ export default async function MarketDetailPage({ params }: Props) {
                 </ExpandableList>
               </ul>
             </div>
+            </CardContent>
             </Card>
           </details>
         );
@@ -709,9 +748,10 @@ export default async function MarketDetailPage({ params }: Props) {
 
       {/* Related Signals */}
       {relatedSignals.length > 0 && (
-        <details open className="mt-6">
+        <details id="section-senales" open>
           <Card>
-          <summary className="px-5 py-3 border-b border-border cursor-pointer list-none">
+          <CardContent>
+          <summary className="cursor-pointer list-none">
             <h2 className="text-lg font-bold">Señales relacionadas ({relatedSignals.length})</h2>
           </summary>
           <div className="divide-y divide-border">
@@ -738,11 +778,20 @@ export default async function MarketDetailPage({ params }: Props) {
               })}
             </ExpandableList>
           </div>
+          </CardContent>
           </Card>
         </details>
       )}
 
       </div>
+
+    </div>
+    {/* TOC sidebar — sticky, xl+ only */}
+    <div className="hidden xl:block w-36 shrink-0">
+      <div className="sticky top-6">
+        <TableOfContents sections={tocSections} />
+      </div>
+    </div>
     </div>
   );
 }

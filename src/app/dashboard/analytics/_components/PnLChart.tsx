@@ -16,6 +16,7 @@ import {
 export interface PnLChartRow {
   title: string;
   seeded: number;
+  withdrawn: number;
   pending: number;
   ownedPnL: number;
   liquidityPnL: number;
@@ -44,9 +45,10 @@ function CustomTooltip({
       <p className="font-medium text-foreground mb-2 truncate">{label}</p>
       <div className="space-y-1">
         <Row label="Fondeado" value={data.seeded} />
+        <Row label="Retirado" value={data.withdrawn} />
         <Row label="Balance pendiente" value={data.pending} />
-        <Row label="PnL liquidez" value={data.liquidityPnL} colored />
-        <Row label="PnL posiciones" value={data.ownedPnL} colored />
+        <Row label="PnL LP" value={data.liquidityPnL} colored />
+        <Row label="PnL trading" value={data.ownedPnL} colored />
         <div className="border-t border-border pt-1 mt-1">
           <Row label="PnL neto" value={data.netPnL} colored bold />
           <Row label="PnL acumulado" value={data.cumulativePnL} colored />

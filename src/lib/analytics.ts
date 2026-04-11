@@ -1,34 +1,38 @@
 import { db } from '@/db/client';
-import { markets } from '@/db/schema';
-import { and, eq, isNotNull, isNull } from 'drizzle-orm';
-import { createPublicClient, http, decodeFunctionData } from 'viem';
+import { markets, activityLog } from '@/db/schema';
+import { and, eq, isNotNull, isNull, inArray } from 'drizzle-orm';
+import { createPublicClient, http, decodeFunctionData, erc20Abi, parseEventLogs } from 'viem';
 import { base, baseSepolia } from 'viem/chains';
-import { PRECOG_MASTER_ABI } from './contracts';
+import { PRECOG_MASTER_ABI, COLLATERAL_TOKENS, MASTER_ADDRESSES } from './contracts';
 import { MAINNET_CHAIN_ID } from './chains';
 import { getOwnedAddresses } from './owned-addresses';
 import { fetchOwnedPositionsDetailed, fetchMarketTxHashes, type OwnedPositionDetail } from './indexer';
-import { fetchMarketPrices } from './onchain';
+import type { Resolution } from '@/db/types';
 
 // --- Types ---
 
 export interface MarketPnL {
   marketId: string;
+  onchainId: string | null;
   title: string;
   category: string;
   status: string;
   date: Date | null;
   seeded: number;         // USDC (divided by 1e6)
-  pending: number;
+  withdrawn: number;      // USDC withdrawn from market
+  pending: number;        // USDC still in market contract
   ownedInvested: number;
+  ownedSellProceeds: number;
   ownedValue: number;
   ownedPnL: number;
-  liquidityPnL: number;   // pending - seeded
+  liquidityPnL: number;   // (withdrawn + pending) - seeded
   netPnL: number;         // liquidityPnL + ownedPnL
   cumulativePnL: number;  // running total (set after sort)
 }
 
 export interface PnLSummary {
   totalSeeded: number;
+  totalWithdrawn: number;
   totalPending: number;
   totalOwnedPnL: number;
   totalLiquidityPnL: number;
@@ -144,18 +148,184 @@ export async function fetchAndCacheSeededAmounts(chainId: number): Promise<Map<s
   return result;
 }
 
+// --- Fetch and cache withdrawn amounts from withdrawal tx receipts ---
+
+export async function fetchAndCacheWithdrawnAmounts(chainId: number): Promise<Map<string, bigint>> {
+  const allDeployed = await db
+    .select({
+      id: markets.id,
+      onchainAddress: markets.onchainAddress,
+      pendingBalance: markets.pendingBalance,
+      seededAmount: markets.seededAmount,
+      resolution: markets.resolution,
+      withdrawnAmount: markets.withdrawnAmount,
+    })
+    .from(markets)
+    .where(and(eq(markets.chainId, chainId), isNotNull(markets.onchainAddress)));
+
+  const result = new Map<string, bigint>();
+  const missingTxHash: { id: string; onchainAddress: string; txHash: string }[] = [];
+  const missingNoTxHash: { id: string; onchainAddress: string }[] = [];
+  const allMissingIds = new Set<string>();
+
+  for (const m of allDeployed) {
+    if (!m.onchainAddress) continue;
+    const addr = m.onchainAddress.toLowerCase();
+
+    if (m.withdrawnAmount) {
+      result.set(addr, BigInt(m.withdrawnAmount));
+      continue;
+    }
+
+    allMissingIds.add(m.id);
+    const res = m.resolution as Resolution | null;
+    const txHash = res?.withdrawal?.withdrawTxHash;
+    if (txHash) {
+      missingTxHash.push({ id: m.id, onchainAddress: addr, txHash });
+    } else if (res?.withdrawal?.withdrawnAt) {
+      missingNoTxHash.push({ id: m.id, onchainAddress: addr });
+    }
+  }
+
+  // Pass 1: Decode withdrawal amounts from tx receipts
+  if (missingTxHash.length > 0) {
+    const client = getClient(chainId);
+
+    for (const m of missingTxHash) {
+      try {
+        const receipt = await client.getTransactionReceipt({ hash: m.txHash as `0x${string}` });
+        const transferLogs = parseEventLogs({ abi: erc20Abi, logs: receipt.logs, eventName: 'Transfer' });
+
+        const withdrawTransfer = transferLogs.find(
+          (log) => log.args.from.toLowerCase() === m.onchainAddress,
+        );
+
+        if (withdrawTransfer) {
+          const amount = withdrawTransfer.args.value;
+          result.set(m.onchainAddress, amount);
+          allMissingIds.delete(m.id);
+          await db
+            .update(markets)
+            .set({ withdrawnAmount: amount.toString() })
+            .where(eq(markets.id, m.id));
+        }
+      } catch {
+        // Skip if receipt unavailable
+      }
+    }
+  }
+
+  // Pass 2: Backfill from activity log for markets without tx hash
+  if (missingNoTxHash.length > 0) {
+    const ids = missingNoTxHash.map((m) => m.id);
+    const logs = await db
+      .select({ entityId: activityLog.entityId, detail: activityLog.detail })
+      .from(activityLog)
+      .where(and(
+        eq(activityLog.action, 'market_liquidity_withdrawn'),
+        inArray(activityLog.entityId, ids),
+      ));
+
+    for (const log of logs) {
+      if (!log.entityId || !log.detail) continue;
+      const amount = (log.detail as Record<string, unknown>).amount;
+      if (!amount) continue;
+
+      const raw = Math.round(parseFloat(String(amount)) * 1e6);
+      if (raw <= 0) continue;
+
+      const market = missingNoTxHash.find((m) => m.id === log.entityId);
+      if (!market) continue;
+
+      result.set(market.onchainAddress, BigInt(raw));
+      allMissingIds.delete(market.id);
+      await db
+        .update(markets)
+        .set({ withdrawnAmount: raw.toString() })
+        .where(eq(markets.id, market.id));
+    }
+  }
+
+  // Pass 3: Onchain scan via Alchemy getAssetTransfers API
+  // Catches direct contract withdrawals not logged through the UI
+  if (allMissingIds.size > 0) {
+    const collateralToken = COLLATERAL_TOKENS[chainId];
+    const rpcUrl = chainId === MAINNET_CHAIN_ID ? process.env.PREDMARKS_RPC_URL : process.env.PREDMARKS_RPC_URL_SEPOLIA;
+    if (collateralToken && rpcUrl) {
+      const ownedAddresses = await getOwnedAddresses();
+      const targetSet = new Set(ownedAddresses.map((a) => a.toLowerCase()));
+      // Include Master contract — marketWithdraw sends tokens to Master (msg.sender)
+      const masterAddr = MASTER_ADDRESSES[chainId]?.toLowerCase();
+      if (masterAddr) targetSet.add(masterAddr);
+
+      // Only scan markets with near-zero balance (likely withdrawn)
+      const candidates = allDeployed.filter((m) => {
+        if (!m.onchainAddress || !allMissingIds.has(m.id)) return false;
+        const pending = Number(BigInt(m.pendingBalance ?? '0'));
+        const seeded = Number(BigInt(m.seededAmount ?? '0'));
+        return seeded > 0 && pending < seeded * 0.1;
+      });
+
+      for (const m of candidates) {
+        try {
+          const addr = m.onchainAddress!.toLowerCase();
+          const resp = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0', id: 1,
+              method: 'alchemy_getAssetTransfers',
+              params: [{
+                fromAddress: addr,
+                contractAddresses: [collateralToken.toLowerCase()],
+                category: ['erc20'],
+                withMetadata: false,
+                order: 'asc',
+                maxCount: '0x3e8',
+              }],
+            }),
+          });
+          const json = await resp.json() as {
+            result?: { transfers: Array<{ to: string; rawContract: { value: string } }> };
+            error?: { message: string };
+          };
+          if (json.error) throw new Error(json.error.message);
+
+          let totalWithdrawn = BigInt(0);
+          for (const t of json.result?.transfers ?? []) {
+            if (targetSet.has(t.to.toLowerCase())) {
+              totalWithdrawn += BigInt(t.rawContract.value);
+            }
+          }
+
+          if (totalWithdrawn > BigInt(0)) {
+            result.set(addr, totalWithdrawn);
+            await db
+              .update(markets)
+              .set({ withdrawnAmount: totalWithdrawn.toString() })
+              .where(eq(markets.id, m.id));
+          }
+        } catch (err) {
+          console.warn(`[analytics] Failed to scan transfers for ${m.onchainAddress}:`, err);
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
 // --- Compute owned positions PnL ---
 
 interface PositionsByMarket {
   invested: bigint;
+  sellProceeds: bigint;
   value: bigint;
 }
 
-async function computeOwnedPositionsPnL(
+function computeOwnedPositionsPnL(
   positions: OwnedPositionDetail[],
-  dbMarkets: { onchainId: string | null; onchainAddress: string | null; outcomes: unknown; status: string }[],
-  chainId: number,
-): Promise<Map<string, PositionsByMarket>> {
+): Map<string, PositionsByMarket> {
   const result = new Map<string, PositionsByMarket>();
 
   // Group positions by market address
@@ -167,53 +337,25 @@ async function computeOwnedPositionsPnL(
     byMarket.set(key, existing);
   }
 
-  // For open markets, fetch prices to mark-to-market
-  const openMarketIds = new Set<string>();
-  for (const m of dbMarkets) {
-    if ((m.status === 'open' || m.status === 'in_resolution') && m.onchainId) {
-      openMarketIds.add(m.onchainId);
-    }
-  }
-
-  const priceCache = new Map<string, number[]>();
-  for (const m of dbMarkets) {
-    if (!m.onchainId || !openMarketIds.has(m.onchainId)) continue;
-    const outcomeCount = (m.outcomes as string[])?.length ?? 2;
-    try {
-      const prices = await fetchMarketPrices(Number(m.onchainId), outcomeCount, chainId);
-      priceCache.set(m.onchainId, prices);
-    } catch {
-      // Skip if prices unavailable
-    }
-  }
-
+  // Only count actually redeemed positions as value (not unredeemed winners).
+  // Unredeemed winning positions stay in the market contract and are
+  // recovered through LP withdrawal — counting them here would double-count.
+  // Sell proceeds (withdrew) are always counted — they represent actual cash received.
   for (const [marketAddr, marketPositions] of byMarket) {
     let totalInvested = BigInt(0);
+    let totalSellProceeds = BigInt(0);
     let totalValue = BigInt(0);
 
     for (const p of marketPositions) {
       totalInvested += BigInt(p.invested);
+      totalSellProceeds += BigInt(p.withdrew);
 
-      if (p.resolvedTo > 0) {
-        // Resolved market: winner gets shares back at 1:1
-        if (p.outcome === p.resolvedTo) {
-          totalValue += BigInt(p.shares);
-        }
-        // Losers get 0
-      } else {
-        // Open market: mark-to-market using current prices
-        const prices = priceCache.get(p.onchainId);
-        if (prices && prices[p.outcome - 1] !== undefined) {
-          const price = prices[p.outcome - 1]; // percentage 0-100
-          totalValue += (BigInt(p.shares) * BigInt(price)) / BigInt(100);
-        } else {
-          // No price data — use invested as conservative estimate
-          totalValue += BigInt(p.invested);
-        }
+      if (p.isRedeemed && p.resolvedTo > 0 && p.outcome === p.resolvedTo) {
+        totalValue += BigInt(p.shares);
       }
     }
 
-    result.set(marketAddr, { invested: totalInvested, value: totalValue });
+    result.set(marketAddr, { invested: totalInvested, sellProceeds: totalSellProceeds, value: totalValue });
   }
 
   return result;
@@ -223,7 +365,7 @@ async function computeOwnedPositionsPnL(
 
 export async function getAnalyticsData(chainId: number): Promise<AnalyticsData> {
   // Parallel fetch
-  const [dbMarketRows, seededMap, ownedAddresses] = await Promise.all([
+  const [dbMarketRows, seededMap, withdrawnMap, ownedAddresses] = await Promise.all([
     db
       .select({
         id: markets.id,
@@ -236,6 +378,7 @@ export async function getAnalyticsData(chainId: number): Promise<AnalyticsData> 
         onchainAddress: markets.onchainAddress,
         pendingBalance: markets.pendingBalance,
         seededAmount: markets.seededAmount,
+        withdrawnAmount: markets.withdrawnAmount,
         outcomes: markets.outcomes,
       })
       .from(markets)
@@ -246,36 +389,42 @@ export async function getAnalyticsData(chainId: number): Promise<AnalyticsData> 
         ),
       ),
     fetchAndCacheSeededAmounts(chainId),
+    fetchAndCacheWithdrawnAmounts(chainId),
     getOwnedAddresses(),
   ]);
 
   // Fetch owned positions from subgraph
   const ownedPositions = await fetchOwnedPositionsDetailed(chainId, ownedAddresses);
 
-  // Compute owned positions PnL
-  const ownedPnLMap = await computeOwnedPositionsPnL(ownedPositions, dbMarketRows, chainId);
+  // Compute owned positions PnL (only actually redeemed positions count as value)
+  const ownedPnLMap = computeOwnedPositionsPnL(ownedPositions);
 
   // Build per-market PnL
   const marketPnLs: MarketPnL[] = dbMarketRows.map((m) => {
     const addr = m.onchainAddress?.toLowerCase() ?? '';
     const seeded = toUsdc(seededMap.get(addr)?.toString());
+    const withdrawn = toUsdc(withdrawnMap.get(addr)?.toString());
     const pending = toUsdc(m.pendingBalance);
     const owned = ownedPnLMap.get(addr);
     const ownedInvested = owned ? Number(owned.invested) / USDC_DECIMALS : 0;
+    const ownedSellProceeds = owned ? Number(owned.sellProceeds) / USDC_DECIMALS : 0;
     const ownedValue = owned ? Number(owned.value) / USDC_DECIMALS : 0;
-    const ownedPnL = ownedValue - ownedInvested;
-    const liquidityPnL = pending - seeded;
+    const ownedPnL = (ownedValue + ownedSellProceeds) - ownedInvested;
+    const liquidityPnL = (withdrawn + pending) - seeded;
     const netPnL = liquidityPnL + ownedPnL;
 
     return {
       marketId: m.id,
+      onchainId: m.onchainId,
       title: m.title,
       category: m.category,
       status: m.status,
       date: m.publishedAt ?? m.createdAt,
       seeded,
+      withdrawn,
       pending,
       ownedInvested,
+      ownedSellProceeds,
       ownedValue,
       ownedPnL,
       liquidityPnL,
@@ -300,6 +449,7 @@ export async function getAnalyticsData(chainId: number): Promise<AnalyticsData> 
   // Summary
   const summary: PnLSummary = {
     totalSeeded: marketPnLs.reduce((s, m) => s + m.seeded, 0),
+    totalWithdrawn: marketPnLs.reduce((s, m) => s + m.withdrawn, 0),
     totalPending: marketPnLs.reduce((s, m) => s + m.pending, 0),
     totalOwnedPnL: marketPnLs.reduce((s, m) => s + m.ownedPnL, 0),
     totalLiquidityPnL: marketPnLs.reduce((s, m) => s + m.liquidityPnL, 0),

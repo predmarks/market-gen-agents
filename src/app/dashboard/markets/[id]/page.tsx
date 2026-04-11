@@ -205,6 +205,111 @@ export default async function MarketDetailPage({ params }: Props) {
         &larr; Volver
       </Link>
 
+      {/* Market identity */}
+      <div className="flex items-start justify-between gap-4 mb-2">
+        {isEditable ? (
+          <EditableField
+            marketId={market.id}
+            field="title"
+            value={market.title}
+            className="text-xl font-bold"
+          />
+        ) : (
+          <h1 className="text-xl font-bold">{market.title}</h1>
+        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {review?.recommendation && !(market.status === 'rejected' && review.recommendation === 'reject') && (
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${RECOMMENDATION_STYLES[review.recommendation]?.color ?? ''}`}
+            >
+              {RECOMMENDATION_STYLES[review.recommendation]?.label ?? review.recommendation}
+            </span>
+          )}
+          <StatusBadge status={market.status as Market['status']} />
+        </div>
+      </div>
+
+      {sourceTopics.length > 0 && (
+        <div className="flex items-center gap-2 mb-4 text-xs text-muted-foreground">
+          <span>Tema{sourceTopics.length > 1 ? 's' : ''}:</span>
+          {sourceTopics.map((t, i) => (
+            <span key={t.id}>
+              {i > 0 && ', '}
+              <Link href={`/dashboard/topics/${t.slug}`} className="text-blue-600 dark:text-blue-400 hover:underline">{t.name}</Link>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Outcomes */}
+      {(() => {
+        const outcomes = (market.outcomes as string[]) ?? ['Si', 'No'];
+        const DOT_COLORS = ['bg-blue-400', 'bg-amber-400', 'bg-purple-400', 'bg-emerald-400', 'bg-rose-400', 'bg-cyan-400', 'bg-orange-400', 'bg-muted-foreground'];
+        return (
+          <div className="mb-4 space-y-0.5">
+            {outcomes.map((o: string, i: number) => (
+              <div key={o} className="flex items-center gap-1.5">
+                <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${market.outcome === o ? 'bg-green-500' : DOT_COLORS[i % DOT_COLORS.length]}`} />
+                <span className={`text-sm ${market.outcome === o ? 'font-semibold text-green-700 dark:text-green-300' : 'text-foreground/80'}`}>{o}</span>
+                {market.outcome === o && <span className="text-[10px] text-green-500 dark:text-green-400 ml-1">resultado</span>}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* On-chain info */}
+      {market.onchainId && (
+        <div className="mb-4 rounded-md bg-muted border border-border px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">On-chain</span>
+              {onchainData && JSON.stringify({ t: market.title, d: market.description, c: market.category, o: market.outcomes, e: market.endTimestamp }) === JSON.stringify({ t: onchainData.name, d: onchainData.description, c: onchainData.category, o: onchainData.outcomes, e: onchainData.endTimestamp }) && (
+                <span className="text-xs text-green-600 dark:text-green-400">En sync</span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {market.onchainAddress && (
+                <a
+                  href={`${getBasescanUrl(market.chainId)}/address/${market.onchainAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Basescan
+                </a>
+              )}
+              <a
+                href={`${getPredmarksUrl(market.chainId)}/mercados/${market.onchainId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Predmarks
+              </a>
+            </div>
+          </div>
+          <div className="flex items-center gap-6 text-sm">
+            <div>
+              <span className="text-muted-foreground/60 text-xs">ID</span>
+              <p className="font-mono font-medium text-foreground/80">#{market.onchainId}</p>
+            </div>
+            {market.volume && (
+              <div>
+                <span className="text-muted-foreground/60 text-xs">Volumen</span>
+                <p className="font-medium text-foreground/80">${formatVolume(market.volume)}</p>
+              </div>
+            )}
+            {market.participants != null && (
+              <div>
+                <span className="text-muted-foreground/60 text-xs">Participantes</span>
+                <p className="font-medium text-foreground/80">{Math.max(0, (market.participants ?? 0) - (market.ownedParticipants ?? 0))}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="mb-4 flex gap-2 flex-wrap items-center">
         <MarketActions
@@ -386,109 +491,6 @@ export default async function MarketDetailPage({ params }: Props) {
 
       <Card className="p-6">
         <CardContent className="p-0">
-        <div className="flex items-start justify-between gap-4 mb-4">
-          {isEditable ? (
-            <EditableField
-              marketId={market.id}
-              field="title"
-              value={market.title}
-              className="text-xl font-bold"
-            />
-          ) : (
-            <h1 className="text-xl font-bold">{market.title}</h1>
-          )}
-          <div className="flex items-center gap-2 shrink-0">
-            {review?.recommendation && !(market.status === 'rejected' && review.recommendation === 'reject') && (
-              <span
-                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${RECOMMENDATION_STYLES[review.recommendation]?.color ?? ''}`}
-              >
-                {RECOMMENDATION_STYLES[review.recommendation]?.label ?? review.recommendation}
-              </span>
-            )}
-            <StatusBadge status={market.status as Market['status']} />
-          </div>
-        </div>
-
-        {sourceTopics.length > 0 && (
-          <div className="flex items-center gap-2 mb-4 text-xs text-muted-foreground">
-            <span>Tema{sourceTopics.length > 1 ? 's' : ''}:</span>
-            {sourceTopics.map((t, i) => (
-              <span key={t.id}>
-                {i > 0 && ', '}
-                <Link href={`/dashboard/topics/${t.slug}`} className="text-blue-600 dark:text-blue-400 hover:underline">{t.name}</Link>
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Outcomes */}
-        {(() => {
-          const outcomes = (market.outcomes as string[]) ?? ['Si', 'No'];
-          const DOT_COLORS = ['bg-blue-400', 'bg-amber-400', 'bg-purple-400', 'bg-emerald-400', 'bg-rose-400', 'bg-cyan-400', 'bg-orange-400', 'bg-muted-foreground'];
-          return (
-            <div className="mb-4 space-y-0.5">
-              {outcomes.map((o: string, i: number) => (
-                <div key={o} className="flex items-center gap-1.5">
-                  <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${market.outcome === o ? 'bg-green-500' : DOT_COLORS[i % DOT_COLORS.length]}`} />
-                  <span className={`text-sm ${market.outcome === o ? 'font-semibold text-green-700 dark:text-green-300' : 'text-foreground/80'}`}>{o}</span>
-                  {market.outcome === o && <span className="text-[10px] text-green-500 dark:text-green-400 ml-1">resultado</span>}
-                </div>
-              ))}
-            </div>
-          );
-        })()}
-
-        {/* On-chain info */}
-        {market.onchainId && (
-          <div className="mb-4 rounded-md bg-muted border border-border px-4 py-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">On-chain</span>
-                {onchainData && JSON.stringify({ t: market.title, d: market.description, c: market.category, o: market.outcomes, e: market.endTimestamp }) === JSON.stringify({ t: onchainData.name, d: onchainData.description, c: onchainData.category, o: onchainData.outcomes, e: onchainData.endTimestamp }) && (
-                  <span className="text-xs text-green-600 dark:text-green-400">En sync</span>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                {market.onchainAddress && (
-                  <a
-                    href={`${getBasescanUrl(market.chainId)}/address/${market.onchainAddress}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                  >
-                    Basescan
-                  </a>
-                )}
-                <a
-                  href={`${getPredmarksUrl(market.chainId)}/mercados/${market.onchainId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  Predmarks
-                </a>
-              </div>
-            </div>
-            <div className="flex items-center gap-6 text-sm">
-              <div>
-                <span className="text-muted-foreground/60 text-xs">ID</span>
-                <p className="font-mono font-medium text-foreground/80">#{market.onchainId}</p>
-              </div>
-              {market.volume && (
-                <div>
-                  <span className="text-muted-foreground/60 text-xs">Volumen</span>
-                  <p className="font-medium text-foreground/80">${formatVolume(market.volume)}</p>
-                </div>
-              )}
-              {market.participants != null && (
-                <div>
-                  <span className="text-muted-foreground/60 text-xs">Participantes</span>
-                  <p className="font-medium text-foreground/80">{Math.max(0, (market.participants ?? 0) - (market.ownedParticipants ?? 0))}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Pending pipeline suggestion */}
         {market.pendingSuggestion && (

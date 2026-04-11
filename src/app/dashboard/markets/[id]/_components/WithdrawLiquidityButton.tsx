@@ -287,8 +287,8 @@ export function WithdrawLiquidityButton({ marketId, onchainId, marketAddress, ch
   const transferTxHash = txHash && (step === 'confirming-transfer' || step === 'transferring') ? txHash : withdrawal?.ownershipTransferTxHash;
   const withdrawTxHash = txHash && (step === 'confirming-withdraw' || step === 'withdrawing') ? txHash : withdrawal?.withdrawTxHash;
 
-  const borderColor = allDone ? 'border-green-200' : 'border-purple-200';
-  const bgColor = allDone ? 'bg-green-50' : 'bg-purple-50';
+  const borderColor = allDone ? 'border-green-200 dark:border-green-800' : 'border-purple-200 dark:border-purple-800';
+  const bgColor = allDone ? 'bg-green-50 dark:bg-green-950/40' : 'bg-purple-50 dark:bg-purple-950/40';
 
   // Stepper data
   const steps = [
@@ -358,7 +358,7 @@ export function WithdrawLiquidityButton({ marketId, onchainId, marketAddress, ch
       </div>
 
       {hasUnredeemedWinners && (
-        <p className="text-[10px] text-amber-700 bg-amber-100 border border-amber-200 rounded px-2 py-1 mb-3">
+        <p className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded px-2 py-1 mb-3">
           Hay usuarios con posiciones ganadoras sin redimir. Retirar liquidez puede impedir que cobren.
         </p>
       )}

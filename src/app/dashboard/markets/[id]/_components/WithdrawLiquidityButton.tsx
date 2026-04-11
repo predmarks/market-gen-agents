@@ -6,6 +6,7 @@ import { encodeFunctionData } from 'viem';
 import { useAccount, usePublicClient } from 'wagmi';
 import { PRECOG_MASTER_ABI, PRECOG_MARKET_ABI, ERC20_ABI, MASTER_ADDRESSES } from '@/lib/contracts';
 import { getBasescanUrl } from '@/lib/chains';
+import { Button } from '@/components/ui/button';
 import type { WithdrawalProgress } from '@/db/types';
 
 interface Props {
@@ -37,8 +38,8 @@ function TxLink({ hash, chainId }: { hash: string; chainId: number }) {
 function Param({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between text-[11px]">
-      <span className="text-gray-500">{label}</span>
-      <span className="text-gray-800 font-mono">{value}</span>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-foreground font-mono">{value}</span>
     </div>
   );
 }
@@ -319,13 +320,13 @@ export function WithdrawLiquidityButton({ marketId, onchainId, marketAddress, ch
             ? 'bg-green-500 text-white'
             : s.active || s.spinning
               ? 'bg-purple-500 text-white'
-              : 'bg-gray-200 text-gray-500';
+              : 'bg-muted text-muted-foreground';
           const labelClass = s.done
-            ? 'text-green-700'
+            ? 'text-green-700 dark:text-green-300'
             : s.active || s.spinning
-              ? 'text-purple-700 font-semibold'
-              : 'text-gray-500';
-          const lineClass = s.done ? 'bg-green-300' : 'bg-gray-300';
+              ? 'text-purple-700 dark:text-purple-300 font-semibold'
+              : 'text-muted-foreground';
+          const lineClass = s.done ? 'bg-green-300 dark:bg-green-700' : 'bg-border';
 
           return (
             <div key={s.label} className="flex items-center gap-1">
@@ -362,30 +363,30 @@ export function WithdrawLiquidityButton({ marketId, onchainId, marketAddress, ch
         </p>
       )}
 
-      <h3 className="text-sm font-semibold text-gray-700 mb-3">Retiro de liquidez{balanceLabel ? ` — ${balanceLabel}` : ''}</h3>
+      <h3 className="text-sm font-semibold text-foreground mb-3">Retiro de liquidez{balanceLabel ? ` — ${balanceLabel}` : ''}</h3>
 
       {/* Preview: Transfer ownership */}
       {step === 'preview-transfer' && (
-        <div className="rounded-md border border-gray-200 bg-white p-3 space-y-3 text-sm">
-          <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">TX 1: Transferir ownership</p>
+        <div className="rounded-md border border-border bg-card p-3 space-y-3 text-sm">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">TX 1: Transferir ownership</p>
           <div className="space-y-1">
             <Param label="Contrato" value={addr(masterAddress)} />
             <Param label="Funcion" value="marketTransferOwnership" />
             <Param label="Market ID" value={String(onchainId)} />
             <Param label="Nuevo owner" value={addr(address!)} />
           </div>
-          {balance && <p className="text-[10px] text-gray-400">Balance del mercado: ${balance}</p>}
+          {balance && <p className="text-[10px] text-muted-foreground">Balance del mercado: ${balance}</p>}
           <div className="flex items-center gap-2">
-            <button onClick={handleTransfer} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 cursor-pointer">Confirmar y firmar</button>
-            <button onClick={() => setStep('idle')} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">Cancelar</button>
+            <Button onClick={handleTransfer} size="sm" className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600">Confirmar y firmar</Button>
+            <Button onClick={() => setStep('idle')} variant="outline" size="sm">Cancelar</Button>
           </div>
         </div>
       )}
 
       {/* Preview: Withdraw */}
       {step === 'preview-withdraw' && tokenAddress && (
-        <div className="rounded-md border border-gray-200 bg-white p-3 space-y-3 text-sm">
-          <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+        <div className="rounded-md border border-border bg-card p-3 space-y-3 text-sm">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
             {withdrawal?.ownershipTransferredAt ? 'TX 2' : 'TX 1'}: Retirar liquidez
           </p>
           <div className="space-y-1">
@@ -393,26 +394,26 @@ export function WithdrawLiquidityButton({ marketId, onchainId, marketAddress, ch
             <Param label="Funcion" value="withdraw" />
             <Param label="Token" value={addr(tokenAddress)} />
           </div>
-          {balance && <p className="text-[10px] text-gray-400">Balance: ${balance}</p>}
+          {balance && <p className="text-[10px] text-muted-foreground">Balance: ${balance}</p>}
           <div className="flex items-center gap-2">
-            <button onClick={handleWithdraw} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 cursor-pointer">Confirmar y firmar</button>
-            <button onClick={() => setStep('idle')} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">Cancelar</button>
+            <Button onClick={handleWithdraw} size="sm" className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600">Confirmar y firmar</Button>
+            <Button onClick={() => setStep('idle')} variant="outline" size="sm">Cancelar</Button>
           </div>
         </div>
       )}
 
       {/* Preview: Return ownership */}
       {step === 'preview-return' && (
-        <div className="rounded-md border border-gray-200 bg-white p-3 space-y-3 text-sm">
-          <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Devolver ownership al Master</p>
+        <div className="rounded-md border border-border bg-card p-3 space-y-3 text-sm">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Devolver ownership al Master</p>
           <div className="space-y-1">
             <Param label="Contrato" value={addr(marketAddress)} />
             <Param label="Funcion" value="transferOwnership" />
             <Param label="Nuevo owner" value={addr(masterAddress)} />
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={handleReturnOwnership} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-orange-600 text-white hover:bg-orange-700 cursor-pointer">Confirmar y firmar</button>
-            <button onClick={() => setStep('idle')} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">Cancelar</button>
+            <Button onClick={handleReturnOwnership} size="sm" className="bg-orange-600 text-white hover:bg-orange-700 dark:bg-orange-700 dark:hover:bg-orange-600">Confirmar y firmar</Button>
+            <Button onClick={() => setStep('idle')} variant="outline" size="sm">Cancelar</Button>
           </div>
         </div>
       )}
@@ -421,7 +422,7 @@ export function WithdrawLiquidityButton({ marketId, onchainId, marketAddress, ch
       {step !== 'preview-transfer' && step !== 'preview-return' && !(step === 'preview-withdraw' && tokenAddress) && (
         <div className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <button
+            <Button
               onClick={() => {
                 if (alreadyWithdrawn) return;
                 if (step === 'idle' || step === 'error') {
@@ -429,22 +430,25 @@ export function WithdrawLiquidityButton({ marketId, onchainId, marketAddress, ch
                 }
               }}
               disabled={busy || !!alreadyWithdrawn}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-purple-300 text-purple-700 bg-purple-50 hover:bg-purple-100 disabled:opacity-50 cursor-pointer"
+              variant="outline"
+              size="sm"
+              className="border-purple-300 text-purple-700 bg-purple-50 hover:bg-purple-100 dark:border-purple-700 dark:text-purple-300 dark:bg-purple-900/30 dark:hover:bg-purple-900/50"
             >
               {label}
-            </button>
+            </Button>
             {txHash && <TxLink hash={txHash} chainId={chainId} />}
             {alreadyWithdrawn && <span className="text-xs text-green-600">OK</span>}
-            {error && <span className="text-xs text-red-500 max-w-xs truncate" title={error}>Error: {error.slice(0, 60)}</span>}
+            {error && <span className="text-xs text-destructive max-w-xs truncate" title={error}>Error: {error.slice(0, 60)}</span>}
           </div>
           {showReturnOwnership && (
-            <button
+            <Button
               onClick={() => setStep('preview-return')}
               disabled={busy}
-              className="text-[10px] text-gray-400 hover:text-gray-600 underline cursor-pointer disabled:opacity-50"
+              variant="link"
+              className="text-[10px] text-muted-foreground hover:text-foreground underline h-auto p-0"
             >
               Devolver ownership al Master
-            </button>
+            </Button>
           )}
         </div>
       )}

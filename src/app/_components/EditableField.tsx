@@ -2,6 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 import { Markdown } from './Markdown';
 
 interface EditableFieldProps {
@@ -86,29 +89,30 @@ export function EditableField({
   if (!editing) {
     return (
       <div>
-        {error && <p className="text-xs text-red-500 mb-1">{error}</p>}
+        {error && <p className="text-xs text-destructive mb-1">{error}</p>}
         <div
           onClick={() => { setError(null); setEditing(true); }}
-          className={`cursor-pointer hover:bg-yellow-50 hover:outline hover:outline-1 hover:outline-yellow-300 rounded px-0.5 -mx-0.5 transition-colors ${className}`}
+          className={cn(
+            'cursor-pointer hover:bg-yellow-50 dark:hover:bg-yellow-950/30 hover:outline hover:outline-1 hover:outline-yellow-300 dark:hover:outline-yellow-700 rounded px-0.5 -mx-0.5 transition-colors',
+            className
+          )}
           title="Click para editar"
         >
         {displayValue
           ? <span>{displayValue}</span>
           : current
             ? (renderMarkdown ? <Markdown>{current}</Markdown> : <span>{current}</span>)
-            : <span className="text-gray-400 italic">Sin contenido</span>
+            : <span className="text-muted-foreground italic">Sin contenido</span>
         }
         </div>
       </div>
     );
   }
 
-  const inputClass = 'w-full px-2 py-1 text-sm border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400';
-
   return (
     <div className="space-y-1">
       {type === 'textarea' ? (
-        <textarea
+        <Textarea
           ref={inputRef as React.RefObject<HTMLTextAreaElement>}
           value={current}
           onChange={(e) => setCurrent(e.target.value)}
@@ -116,40 +120,16 @@ export function EditableField({
           onBlur={save}
           disabled={saving}
           rows={4}
-          className={inputClass}
-        />
-      ) : type === 'datetime' ? (
-        <input
-          ref={inputRef as React.RefObject<HTMLInputElement>}
-          type="datetime-local"
-          value={current}
-          onChange={(e) => setCurrent(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={save}
-          disabled={saving}
-          className={inputClass}
-        />
-      ) : type === 'date' ? (
-        <input
-          ref={inputRef as React.RefObject<HTMLInputElement>}
-          type="date"
-          value={current}
-          onChange={(e) => setCurrent(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={save}
-          disabled={saving}
-          className={inputClass}
         />
       ) : (
-        <input
+        <Input
           ref={inputRef as React.RefObject<HTMLInputElement>}
-          type="text"
+          type={type === 'datetime' ? 'datetime-local' : type}
           value={current}
           onChange={(e) => setCurrent(e.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={save}
           disabled={saving}
-          className={inputClass}
         />
       )}
     </div>

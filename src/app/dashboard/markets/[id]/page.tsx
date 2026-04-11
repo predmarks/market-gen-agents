@@ -35,6 +35,8 @@ import { CitedText } from '@/app/_components/CitedText';
 import { EditableField } from '@/app/_components/EditableField';
 import { ResolutionConfirmButton, ResolutionFeedbackButton } from './_components/ResolutionActions';
 import { getUserTimezone } from '@/lib/timezone';
+import { Card, CardContent } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 
 function formatVolume(vol: string): string {
   const n = parseFloat(vol) / 1e6;
@@ -53,10 +55,10 @@ function formatTimestamp(ts: number, tz: string): string {
 }
 
 const RECOMMENDATION_STYLES: Record<string, { color: string; label: string }> = {
-  publish: { color: 'bg-green-100 text-green-800', label: 'Publicar' },
-  rewrite_then_publish: { color: 'bg-yellow-100 text-yellow-800', label: 'Reescribir y publicar' },
-  hold: { color: 'bg-orange-100 text-orange-800', label: 'Esperar' },
-  reject: { color: 'bg-red-100 text-red-800', label: 'Rechazar' },
+  publish: { color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300', label: 'Publicar' },
+  rewrite_then_publish: { color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300', label: 'Reescribir y publicar' },
+  hold: { color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300', label: 'Esperar' },
+  reject: { color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300', label: 'Rechazar' },
 };
 
 interface Props {
@@ -198,7 +200,7 @@ export default async function MarketDetailPage({ params }: Props) {
     <div>
       <Link
         href="/"
-        className="text-sm text-gray-500 hover:text-gray-900 mb-4 inline-block"
+        className="text-sm text-muted-foreground hover:text-foreground mb-4 inline-block"
       >
         &larr; Volver
       </Link>
@@ -221,7 +223,7 @@ export default async function MarketDetailPage({ params }: Props) {
 
       {/* Auto-trigger resolution check when market is in_resolution but no suggestion yet */}
       {market.status === 'in_resolution' && (!resolution || !resolution.suggestedOutcome) && (
-        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-6">
+        <div className="mb-6 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-6">
           <CheckResolutionTrigger marketId={market.id} checkingAt={resolution?.checkingAt} />
           <SuggestResolutionButton marketId={market.id} outcomes={(market.outcomes as string[]) ?? ['Si', 'No']} />
         </div>
@@ -250,8 +252,8 @@ export default async function MarketDetailPage({ params }: Props) {
         ];
 
         const allDone = steps.every((s) => s.done);
-        const borderColor = allDone ? 'border-green-200' : 'border-amber-200';
-        const bgColor = allDone ? 'bg-green-50' : 'bg-amber-50';
+        const borderColor = allDone ? 'border-green-200 dark:border-green-800' : 'border-amber-200 dark:border-amber-800';
+        const bgColor = allDone ? 'bg-green-50 dark:bg-green-900/20' : 'bg-amber-50 dark:bg-amber-900/20';
 
         return (
           <div className={`mb-6 rounded-lg border p-6 ${bgColor} ${borderColor}`}>
@@ -259,10 +261,10 @@ export default async function MarketDetailPage({ params }: Props) {
             <div className="flex items-center gap-1 mb-4">
               {steps.map((s, i) => (
                 <div key={s.label} className="flex items-center gap-1">
-                  {i > 0 && <div className={`w-4 h-px ${s.done ? 'bg-green-300' : 'bg-gray-300'}`} />}
+                  {i > 0 && <div className={`w-4 h-px ${s.done ? 'bg-green-300 dark:bg-green-700' : 'bg-border'}`} />}
                   <div className="flex items-center gap-1.5">
                     <span className={`flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold ${
-                      s.done ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
+                      s.done ? 'bg-green-500 text-white' : 'bg-muted text-muted-foreground'
                     }`}>
                       {s.done ? '\u2713' : i + 1}
                     </span>
@@ -271,12 +273,12 @@ export default async function MarketDetailPage({ params }: Props) {
                         href={`${basescanBase}/tx/${s.txHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={`text-[10px] font-medium hover:underline ${s.done ? 'text-green-700' : 'text-gray-500'}`}
+                        className={`text-[10px] font-medium hover:underline ${s.done ? 'text-green-700 dark:text-green-300' : 'text-muted-foreground'}`}
                       >
                         {s.label}
                       </a>
                     ) : (
-                      <span className={`text-[10px] font-medium ${s.done ? 'text-green-700' : 'text-gray-500'}`}>
+                      <span className={`text-[10px] font-medium ${s.done ? 'text-green-700 dark:text-green-300' : 'text-muted-foreground'}`}>
                         {s.label}
                       </span>
                     )}
@@ -291,27 +293,27 @@ export default async function MarketDetailPage({ params }: Props) {
                 {resolution.suggestedOutcome || market.outcome || 'Sin resultado'}
               </span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                resolution.confidence === 'high' ? 'bg-green-100 text-green-700' :
-                resolution.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                'bg-gray-100 text-gray-500'
+                resolution.confidence === 'high' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                resolution.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                'bg-muted text-muted-foreground'
               }`}>
                 {resolution.confidence === 'high' ? 'Alta' :
                  resolution.confidence === 'medium' ? 'Media' : 'Baja'}
               </span>
               {resolution.confirmedAt && (
-                <span className="text-[10px] text-gray-400">
+                <span className="text-[10px] text-muted-foreground/60">
                   {new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: tz }).format(new Date(resolution.confirmedAt))}
                 </span>
               )}
             </div>
 
             {/* Evidence */}
-            {typeof resolution.evidence === 'string' && <p className="text-sm text-gray-700 mb-3"><CitedText>{resolution.evidence}</CitedText></p>}
+            {typeof resolution.evidence === 'string' && <p className="text-sm text-foreground/80 mb-3"><CitedText>{resolution.evidence}</CitedText></p>}
 
             {resolution.evidenceUrls && resolution.evidenceUrls.length > 0 && (
               <div className="mb-3">
                 {resolution.evidenceUrls.map((url, i) => (
-                  <a key={i} href={url} target="_blank" rel="noopener noreferrer" className={`block ${i === 0 ? 'text-sm text-blue-600' : 'text-[11px] text-gray-400'} hover:underline truncate`}>
+                  <a key={i} href={url} target="_blank" rel="noopener noreferrer" className={`block ${i === 0 ? 'text-sm text-blue-600 dark:text-blue-400' : 'text-[11px] text-muted-foreground/60'} hover:underline truncate`}>
                     {(() => { try { return new URL(url).hostname.replace('www.', ''); } catch { return url; } })()}
                   </a>
                 ))}
@@ -320,14 +322,14 @@ export default async function MarketDetailPage({ params }: Props) {
 
             {/* Action for current step */}
             {!step2 && resolution.suggestedOutcome && (
-              <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
+              <div className="flex items-center gap-2 pt-3 border-t border-border">
                 <ResolutionConfirmButton marketId={market.id} outcome={resolution.suggestedOutcome} />
                 <ResolutionFeedbackButton marketId={market.id} />
               </div>
             )}
 
             {step2 && !step3 && hasMarketAddress && (
-              <div className="pt-3 border-t border-gray-200">
+              <div className="pt-3 border-t border-border">
                 <ResolveOnchainButton
                   marketId={market.id}
                   onchainId={Number(market.onchainId)}
@@ -340,9 +342,9 @@ export default async function MarketDetailPage({ params }: Props) {
             )}
 
             {step3 && hasReporter && !reporterDone && hasMarketAddress && (
-              <div className="pt-3 border-t border-orange-200">
+              <div className="pt-3 border-t border-orange-200 dark:border-orange-800">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs text-orange-700 font-medium">Reporter TX pendiente</span>
+                  <span className="text-xs text-orange-700 dark:text-orange-300 font-medium">Reporter TX pendiente</span>
                 </div>
                 <ResolveOnchainButton
                   marketId={market.id}
@@ -382,7 +384,8 @@ export default async function MarketDetailPage({ params }: Props) {
         );
       })()}
 
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <Card className="p-6">
+        <CardContent className="p-0">
         <div className="flex items-start justify-between gap-4 mb-4">
           {isEditable ? (
             <EditableField
@@ -407,12 +410,12 @@ export default async function MarketDetailPage({ params }: Props) {
         </div>
 
         {sourceTopics.length > 0 && (
-          <div className="flex items-center gap-2 mb-4 text-xs text-gray-500">
+          <div className="flex items-center gap-2 mb-4 text-xs text-muted-foreground">
             <span>Tema{sourceTopics.length > 1 ? 's' : ''}:</span>
             {sourceTopics.map((t, i) => (
               <span key={t.id}>
                 {i > 0 && ', '}
-                <Link href={`/dashboard/topics/${t.slug}`} className="text-blue-600 hover:underline">{t.name}</Link>
+                <Link href={`/dashboard/topics/${t.slug}`} className="text-blue-600 dark:text-blue-400 hover:underline">{t.name}</Link>
               </span>
             ))}
           </div>
@@ -421,14 +424,14 @@ export default async function MarketDetailPage({ params }: Props) {
         {/* Outcomes */}
         {(() => {
           const outcomes = (market.outcomes as string[]) ?? ['Si', 'No'];
-          const DOT_COLORS = ['bg-blue-400', 'bg-amber-400', 'bg-purple-400', 'bg-emerald-400', 'bg-rose-400', 'bg-cyan-400', 'bg-orange-400', 'bg-gray-400'];
+          const DOT_COLORS = ['bg-blue-400', 'bg-amber-400', 'bg-purple-400', 'bg-emerald-400', 'bg-rose-400', 'bg-cyan-400', 'bg-orange-400', 'bg-muted-foreground'];
           return (
             <div className="mb-4 space-y-0.5">
               {outcomes.map((o: string, i: number) => (
                 <div key={o} className="flex items-center gap-1.5">
                   <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${market.outcome === o ? 'bg-green-500' : DOT_COLORS[i % DOT_COLORS.length]}`} />
-                  <span className={`text-sm ${market.outcome === o ? 'font-semibold text-green-700' : 'text-gray-700'}`}>{o}</span>
-                  {market.outcome === o && <span className="text-[10px] text-green-500 ml-1">resultado</span>}
+                  <span className={`text-sm ${market.outcome === o ? 'font-semibold text-green-700 dark:text-green-300' : 'text-foreground/80'}`}>{o}</span>
+                  {market.outcome === o && <span className="text-[10px] text-green-500 dark:text-green-400 ml-1">resultado</span>}
                 </div>
               ))}
             </div>
@@ -437,12 +440,12 @@ export default async function MarketDetailPage({ params }: Props) {
 
         {/* On-chain info */}
         {market.onchainId && (
-          <div className="mb-4 rounded-md bg-gray-50 border border-gray-200 px-4 py-3">
+          <div className="mb-4 rounded-md bg-muted border border-border px-4 py-3">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">On-chain</span>
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">On-chain</span>
                 {onchainData && JSON.stringify({ t: market.title, d: market.description, c: market.category, o: market.outcomes, e: market.endTimestamp }) === JSON.stringify({ t: onchainData.name, d: onchainData.description, c: onchainData.category, o: onchainData.outcomes, e: onchainData.endTimestamp }) && (
-                  <span className="text-xs text-green-600">En sync</span>
+                  <span className="text-xs text-green-600 dark:text-green-400">En sync</span>
                 )}
               </div>
               <div className="flex items-center gap-3">
@@ -451,7 +454,7 @@ export default async function MarketDetailPage({ params }: Props) {
                     href={`${getBasescanUrl(market.chainId)}/address/${market.onchainAddress}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-blue-600 hover:underline"
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
                   >
                     Basescan
                   </a>
@@ -460,7 +463,7 @@ export default async function MarketDetailPage({ params }: Props) {
                   href={`${getPredmarksUrl(market.chainId)}/mercados/${market.onchainId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-blue-600 hover:underline"
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   Predmarks
                 </a>
@@ -468,19 +471,19 @@ export default async function MarketDetailPage({ params }: Props) {
             </div>
             <div className="flex items-center gap-6 text-sm">
               <div>
-                <span className="text-gray-400 text-xs">ID</span>
-                <p className="font-mono font-medium text-gray-700">#{market.onchainId}</p>
+                <span className="text-muted-foreground/60 text-xs">ID</span>
+                <p className="font-mono font-medium text-foreground/80">#{market.onchainId}</p>
               </div>
               {market.volume && (
                 <div>
-                  <span className="text-gray-400 text-xs">Volumen</span>
-                  <p className="font-medium text-gray-700">${formatVolume(market.volume)}</p>
+                  <span className="text-muted-foreground/60 text-xs">Volumen</span>
+                  <p className="font-medium text-foreground/80">${formatVolume(market.volume)}</p>
                 </div>
               )}
               {market.participants != null && (
                 <div>
-                  <span className="text-gray-400 text-xs">Participantes</span>
-                  <p className="font-medium text-gray-700">{Math.max(0, (market.participants ?? 0) - (market.ownedParticipants ?? 0))}</p>
+                  <span className="text-muted-foreground/60 text-xs">Participantes</span>
+                  <p className="font-medium text-foreground/80">{Math.max(0, (market.participants ?? 0) - (market.ownedParticipants ?? 0))}</p>
                 </div>
               )}
             </div>
@@ -511,8 +514,8 @@ export default async function MarketDetailPage({ params }: Props) {
         )}
 
         <details open className="group">
-          <summary className="text-sm font-medium text-gray-500 cursor-pointer list-none flex items-center gap-1 mb-3">
-            <span className="text-[10px] text-gray-400 group-open:rotate-90 transition-transform">&#9654;</span>
+          <summary className="text-sm font-medium text-muted-foreground cursor-pointer list-none flex items-center gap-1 mb-3">
+            <span className="text-[10px] text-muted-foreground/60 group-open:rotate-90 transition-transform">&#9654;</span>
             Detalles
           </summary>
           <div className="space-y-4">
@@ -521,7 +524,7 @@ export default async function MarketDetailPage({ params }: Props) {
               <span className="mx-2">&middot;</span>
               <TimingSafetyIndicator safety={market.timingSafety as Market['timingSafety']} />
               <span className="mx-2">&middot;</span>
-              <span className="text-xs text-gray-400">Creado {new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: tz }).format(market.createdAt)}</span>
+              <span className="text-xs text-muted-foreground/60">Creado {new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: tz }).format(market.createdAt)}</span>
             </Section>
 
             <Section title="Descripción">
@@ -531,11 +534,11 @@ export default async function MarketDetailPage({ params }: Props) {
                   field="description"
                   value={market.description}
                   type="textarea"
-                  className="text-gray-700"
+                  className="text-foreground/80"
                   renderMarkdown
                 />
               ) : (
-                <Markdown className="text-gray-700">{market.description}</Markdown>
+                <Markdown className="text-foreground/80">{market.description}</Markdown>
               )}
             </Section>
 
@@ -546,11 +549,11 @@ export default async function MarketDetailPage({ params }: Props) {
                   field="endTimestamp"
                   value={new Date(market.endTimestamp * 1000).toISOString().slice(0, 16)}
                   type="datetime"
-                  className="text-gray-700"
+                  className="text-foreground/80"
                   displayValue={formatTimestamp(market.endTimestamp, tz)}
                 />
               ) : (
-                <p className="text-gray-700">{formatTimestamp(market.endTimestamp, tz)}</p>
+                <p className="text-foreground/80">{formatTimestamp(market.endTimestamp, tz)}</p>
               )}
             </Section>
 
@@ -561,13 +564,13 @@ export default async function MarketDetailPage({ params }: Props) {
                   field="expectedResolutionDate"
                   value={market.expectedResolutionDate ?? ''}
                   type="date"
-                  className="text-gray-700"
+                  className="text-foreground/80"
                   displayValue={market.expectedResolutionDate ?? undefined}
                 />
               ) : market.expectedResolutionDate ? (
-                <p className="text-gray-700">{market.expectedResolutionDate}</p>
+                <p className="text-foreground/80">{market.expectedResolutionDate}</p>
               ) : (
-                <p className="text-gray-400 italic text-xs">No definida</p>
+                <p className="text-muted-foreground/60 italic text-xs">No definida</p>
               )}
             </Section>
 
@@ -577,7 +580,7 @@ export default async function MarketDetailPage({ params }: Props) {
                   {(market.tags as string[]).map((tag) => (
                     <span
                       key={tag}
-                      className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-600"
+                      className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"
                     >
                       {tag}
                     </span>
@@ -596,7 +599,8 @@ export default async function MarketDetailPage({ params }: Props) {
         <div className="mt-4">
           <CopyJsonButton json={JSON.stringify(deployable, null, 2)} />
         </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Reviews */}
       {(() => {
@@ -610,23 +614,24 @@ export default async function MarketDetailPage({ params }: Props) {
         if (!hasIterations && !hasReviewOnly) return null;
 
         return (
-          <details open className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
+          <details open className="mt-6">
+            <Card className="p-6">
             <summary className="text-lg font-bold cursor-pointer list-none">Revisiones</summary>
             <div className="mt-4 space-y-4">
               {hasReviewOnly && (
-                <div className="border border-gray-100 rounded-lg px-4 py-4">
+                <div className="border border-border rounded-lg px-4 py-4">
                   <ReviewDetail review={review} />
                 </div>
               )}
               {iterations.map((iter, idx) => (
-                <details key={iter.version} className="border border-gray-100 rounded-lg" open={idx === iterations.length - 1}>
-                  <summary className="px-4 py-3 cursor-pointer hover:bg-gray-50 flex items-center justify-between">
+                <details key={iter.version} className="border border-border rounded-lg" open={idx === iterations.length - 1}>
+                  <summary className="px-4 py-3 cursor-pointer hover:bg-muted flex items-center justify-between">
                     <span className="font-medium text-sm">
                       Versión {iter.version}
                     </span>
-                    <span className="text-sm text-gray-500">
+                    <span className="text-sm text-muted-foreground">
                       {iterationDates.get(iter.version) && (
-                        <span className="mr-3 text-gray-400">{formatEventTime(iterationDates.get(iter.version)!, tz)}</span>
+                        <span className="mr-3 text-muted-foreground/60">{formatEventTime(iterationDates.get(iter.version)!, tz)}</span>
                       )}
                       Score: {iter.review.scores.overallScore.toFixed(1)}/10
                     </span>
@@ -638,7 +643,7 @@ export default async function MarketDetailPage({ params }: Props) {
                     {iter.feedback && (
                       <div>
                         <strong className="text-sm">Feedback:</strong>
-                        <pre className="mt-1 text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded p-2">
+                        <pre className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap bg-muted rounded p-2">
                           {iter.feedback}
                         </pre>
                       </div>
@@ -648,6 +653,7 @@ export default async function MarketDetailPage({ params }: Props) {
                 </details>
               ))}
             </div>
+            </Card>
           </details>
         );
       })()}
@@ -664,20 +670,21 @@ export default async function MarketDetailPage({ params }: Props) {
         if (timeline.length === 0) return null;
 
         return (
-          <details open className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
+          <details open className="mt-6">
+            <Card className="p-6">
             <summary className="text-lg font-bold cursor-pointer list-none">Actividad</summary>
             <div className="mt-4">
-              <ul className="border-l-2 border-gray-200 ml-2 space-y-0">
+              <ul className="border-l-2 border-border ml-2 space-y-0">
                 <ExpandableList>
                   {timeline.map((entry) => (
                     <li key={entry.id} className="relative pl-5 py-1.5">
-                      <span className="absolute -left-[5px] top-2.5 w-2 h-2 rounded-full bg-gray-400" />
+                      <span className="absolute -left-[5px] top-2.5 w-2 h-2 rounded-full bg-muted-foreground" />
                       <div className="flex items-baseline gap-2">
-                        <span className="text-xs text-gray-400 shrink-0 font-mono">
+                        <span className="text-xs text-muted-foreground/60 shrink-0 font-mono">
                           {formatEventTime(entry.time, tz)}
                         </span>
                         {entry.source === 'event' && entry.event && (
-                          <span className="text-sm text-gray-700">
+                          <span className="text-sm text-foreground/80">
                             {formatEvent(entry.event.type as MarketEventType, entry.event.iteration, entry.event.detail as Record<string, unknown> | null)}
                           </span>
                         )}
@@ -692,6 +699,7 @@ export default async function MarketDetailPage({ params }: Props) {
                 </ExpandableList>
               </ul>
             </div>
+            </Card>
           </details>
         );
       })()}
@@ -699,27 +707,28 @@ export default async function MarketDetailPage({ params }: Props) {
 
       {/* Related Signals */}
       {relatedSignals.length > 0 && (
-        <details open className="mt-6 bg-white rounded-lg border border-gray-200">
-          <summary className="px-5 py-3 border-b border-gray-100 cursor-pointer list-none">
+        <details open className="mt-6">
+          <Card>
+          <summary className="px-5 py-3 border-b border-border cursor-pointer list-none">
             <h2 className="text-lg font-bold">Señales relacionadas ({relatedSignals.length})</h2>
           </summary>
-          <div className="divide-y divide-gray-50">
+          <div className="divide-y divide-border">
             <ExpandableList>
               {relatedSignals.map((s) => {
-                const badge = { news: { label: 'Noticia', cls: 'bg-blue-100 text-blue-700' }, data: { label: 'Dato', cls: 'bg-amber-100 text-amber-700' }, social: { label: 'Social', cls: 'bg-purple-100 text-purple-700' }, event: { label: 'Evento', cls: 'bg-green-100 text-green-700' } }[s.type] ?? { label: s.type, cls: 'bg-gray-100 text-gray-600' };
+                const badge = { news: { label: 'Noticia', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' }, data: { label: 'Dato', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' }, social: { label: 'Social', cls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' }, event: { label: 'Evento', cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' } }[s.type] ?? { label: s.type, cls: 'bg-muted text-muted-foreground' };
                 return (
                   <div key={s.id} className="px-5 py-3">
                     <div className="flex items-start gap-2">
                       <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${badge.cls}`}>{badge.label}</span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-400">{s.source}</span>
-                          <span className="text-[10px] text-gray-300">{formatEventTime(s.publishedAt, tz)}</span>
+                          <span className="text-xs text-muted-foreground/60">{s.source}</span>
+                          <span className="text-[10px] text-muted-foreground/50">{formatEventTime(s.publishedAt, tz)}</span>
                         </div>
-                        <p className="text-sm text-gray-800 mt-0.5">
-                          {s.url ? <a href={s.url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline">{s.text}</a> : s.text}
+                        <p className="text-sm text-foreground mt-0.5">
+                          {s.url ? <a href={s.url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 dark:hover:text-blue-400 hover:underline">{s.text}</a> : s.text}
                         </p>
-                        {s.summary && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{s.summary}</p>}
+                        {s.summary && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{s.summary}</p>}
                       </div>
                     </div>
                   </div>
@@ -727,6 +736,7 @@ export default async function MarketDetailPage({ params }: Props) {
               })}
             </ExpandableList>
           </div>
+          </Card>
         </details>
       )}
 
@@ -818,14 +828,14 @@ function formatEvent(
 }
 
 const SECTION_COLORS: Record<string, string> = {
-  'Descripción': 'border-blue-400',
-  'Criterios de resolución': 'border-amber-400',
-  'Fuente de resolución': 'border-green-400',
-  'Contingencias': 'border-orange-400',
-  'Opciones': 'border-purple-400',
-  'Resultado': 'border-green-500',
-  'Cierre del mercado': 'border-gray-300',
-  'Fecha esperada de resolución': 'border-gray-300',
+  'Descripción': 'border-blue-400 dark:border-blue-600',
+  'Criterios de resolución': 'border-amber-400 dark:border-amber-600',
+  'Fuente de resolución': 'border-green-400 dark:border-green-600',
+  'Contingencias': 'border-orange-400 dark:border-orange-600',
+  'Opciones': 'border-purple-400 dark:border-purple-600',
+  'Resultado': 'border-green-500 dark:border-green-600',
+  'Cierre del mercado': 'border-border',
+  'Fecha esperada de resolución': 'border-border',
 };
 
 function Section({
@@ -835,10 +845,10 @@ function Section({
   title: string;
   children: React.ReactNode;
 }) {
-  const borderColor = SECTION_COLORS[title] ?? 'border-gray-300';
+  const borderColor = SECTION_COLORS[title] ?? 'border-border';
   return (
     <div className={`border-l-3 ${borderColor} pl-3`}>
-      <h3 className="text-base font-semibold text-gray-700 mb-1">{title}</h3>
+      <h3 className="text-base font-semibold text-foreground/80 mb-1">{title}</h3>
       <div className="text-sm">{children}</div>
     </div>
   );
@@ -865,7 +875,7 @@ function ReviewDetail({ review }: { review: ReviewResult }) {
       {/* Hard Rules */}
       {review.hardRuleResults.length > 0 && (
         <div className="mb-4">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Reglas estrictas</h3>
+          <h3 className="text-sm font-medium text-muted-foreground mb-2">Reglas estrictas</h3>
           <div className="space-y-1">
             {review.hardRuleResults.map((r) => (
               <div key={r.ruleId} className="text-sm flex gap-2">
@@ -882,7 +892,7 @@ function ReviewDetail({ review }: { review: ReviewResult }) {
       {/* Soft Rules */}
       {review.softRuleResults.filter((r) => !r.passed).length > 0 && (
         <div className="mb-4">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Advertencias</h3>
+          <h3 className="text-sm font-medium text-muted-foreground mb-2">Advertencias</h3>
           <div className="space-y-1">
             {review.softRuleResults
               .filter((r) => !r.passed)
@@ -901,7 +911,7 @@ function ReviewDetail({ review }: { review: ReviewResult }) {
       {/* Resolution Source Check */}
       {review.resolutionSourceCheck && (
         <div className="mb-4">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">
+          <h3 className="text-sm font-medium text-muted-foreground mb-2">
             Verificación de fuente
           </h3>
           <div className="text-sm space-y-1">
@@ -913,7 +923,7 @@ function ReviewDetail({ review }: { review: ReviewResult }) {
               {review.resolutionSourceCheck.publishesRelevantData ? '\u2705' : '\u274C'} Publica datos relevantes
             </div>
             {review.resolutionSourceCheck.note && (
-              <p className="text-gray-600">{review.resolutionSourceCheck.note}</p>
+              <p className="text-muted-foreground">{review.resolutionSourceCheck.note}</p>
             )}
           </div>
         </div>
@@ -922,17 +932,17 @@ function ReviewDetail({ review }: { review: ReviewResult }) {
       {/* Data Verification */}
       {review.dataVerification.length > 0 && (
         <div className="mb-4">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">
+          <h3 className="text-sm font-medium text-muted-foreground mb-2">
             Verificación de datos
           </h3>
           {review.dataVerification.map((v, i) => (
-            <div key={i} className="text-sm text-gray-600 mb-1">
+            <div key={i} className="text-sm text-muted-foreground mb-1">
               {v.isAccurate ? '\u2705' : '\u274C'}{' '}
-              <span className={!v.isAccurate && v.severity === 'critical' ? 'text-red-600 font-medium' : ''}>
+              <span className={!v.isAccurate && v.severity === 'critical' ? 'text-destructive font-medium' : ''}>
                 {v.claim}: {v.currentValue}
               </span>
               {v.source && (
-                <span className="text-gray-400"> ({v.source})</span>
+                <span className="text-muted-foreground/60"> ({v.source})</span>
               )}
             </div>
           ))}
@@ -958,12 +968,12 @@ function ScoreBar({
   return (
     <div>
       <div className="flex justify-between mb-0.5">
-        <span className="text-gray-700">
-          {label} <span className="text-gray-400">({weight})</span>
+        <span className="text-foreground/80">
+          {label} <span className="text-muted-foreground/60">({weight})</span>
         </span>
         <span className="font-medium">{score}/10</span>
       </div>
-      <div className="w-full bg-gray-200 rounded-full h-1.5">
+      <div className="w-full bg-muted rounded-full h-1.5">
         <div
           className={`h-1.5 rounded-full ${color}`}
           style={{ width: `${percentage}%` }}

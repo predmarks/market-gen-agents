@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { usePageContext } from '@/app/_components/PageContext';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { SourcingStep } from '@/db/types';
 
 interface NewsletterRow {
@@ -27,8 +29,8 @@ interface NewsletterRun {
 }
 
 const STATUS_STYLES: Record<string, { label: string; className: string }> = {
-  draft: { label: 'Borrador', className: 'bg-gray-100 text-gray-700' },
-  sent: { label: 'Enviado', className: 'bg-green-100 text-green-700' },
+  draft: { label: 'Borrador', className: 'bg-muted text-foreground' },
+  sent: { label: 'Enviado', className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
 };
 
 const STEP_LABELS: Record<string, string> = {
@@ -53,14 +55,14 @@ function StepIndicator({ step }: { step: SourcingStep }) {
     step.status === 'running' ? '\u25CF' :
     step.status === 'error' ? '\u2717' : '\u25CB';
 
-  const color = step.status === 'done' ? 'text-green-600' :
-    step.status === 'running' ? 'text-blue-600 animate-pulse' :
-    step.status === 'error' ? 'text-red-600' : 'text-gray-400';
+  const color = step.status === 'done' ? 'text-green-600 dark:text-green-400' :
+    step.status === 'running' ? 'text-blue-600 dark:text-blue-400 animate-pulse' :
+    step.status === 'error' ? 'text-destructive' : 'text-muted-foreground/60';
 
   return (
     <div className="flex items-center gap-2 py-0.5">
-      <span className={`text-xs font-mono w-3 text-center ${color}`}>{icon}</span>
-      <span className={`text-xs ${step.status === 'pending' ? 'text-gray-400' : 'text-gray-700'}`}>
+      <span className={cn('text-xs font-mono w-3 text-center', color)}>{icon}</span>
+      <span className={cn('text-xs', step.status === 'pending' ? 'text-muted-foreground/60' : 'text-foreground')}>
         {STEP_LABELS[step.name] || step.name}
       </span>
     </div>
@@ -186,15 +188,14 @@ export default function NewsletterListPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">Newsletter</h1>
         <div className="flex flex-col items-end gap-1">
-          <button
+          <Button
             onClick={handleGenerate}
             disabled={triggering || hasRunning}
-            className="px-4 py-2 text-sm bg-gray-800 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 cursor-pointer"
           >
             {triggering ? 'Iniciando...' : hasRunning ? 'En progreso...' : 'Generar newsletter'}
-          </button>
+          </Button>
           {hasRunning && runningRun && (
-            <span className="text-xs text-blue-600 animate-pulse">
+            <span className="text-xs text-blue-600 dark:text-blue-400 animate-pulse">
               {STEP_LABELS[runningRun.currentStep] || runningRun.currentStep}...
             </span>
           )}
@@ -202,8 +203,8 @@ export default function NewsletterListPage() {
       </div>
 
       {hasRunning && runningRun && (
-        <div className="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="text-sm font-medium text-blue-800 mb-2">Generando newsletter...</div>
+        <div className="mb-4 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+          <div className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">Generando newsletter...</div>
           <div className="space-y-0.5">
             {runningRun.steps.map((step) => (
               <StepIndicator key={step.name} step={step} />
@@ -212,42 +213,42 @@ export default function NewsletterListPage() {
         </div>
       )}
 
-      {loading && <div className="text-sm text-gray-500">Cargando...</div>}
+      {loading && <div className="text-sm text-muted-foreground">Cargando...</div>}
 
       {!loading && newsletters.length === 0 && !hasRunning && (
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-muted-foreground">
           No hay newsletters todavía. Generá el primero con el botón de arriba.
         </div>
       )}
 
       {newsletters.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-50">
+        <div className="bg-card border border-border rounded-lg divide-y divide-border">
           {newsletters.map((n) => {
-            const style = STATUS_STYLES[n.status] ?? { label: n.status, className: 'bg-gray-100 text-gray-700' };
+            const style = STATUS_STYLES[n.status] ?? { label: n.status, className: 'bg-muted text-foreground' };
             return (
               <Link
                 key={n.id}
                 href={`/dashboard/newsletter/${n.id}`}
-                className="block px-4 py-3 hover:bg-gray-50 transition-colors"
+                className="block px-4 py-3 hover:bg-muted transition-colors"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-gray-900 truncate">
+                    <div className="text-sm font-medium text-foreground truncate">
                       {n.subjectLine}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-gray-500">{n.date}</span>
-                      <span className="text-xs text-gray-400">&middot;</span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-muted-foreground">{n.date}</span>
+                      <span className="text-xs text-muted-foreground/60">&middot;</span>
+                      <span className="text-xs text-muted-foreground">
                         {n.featuredMarketIds.length} mercado{n.featuredMarketIds.length !== 1 ? 's' : ''}
                       </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${style.className}`}>
+                    <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium', style.className)}>
                       {style.label}
                     </span>
-                    <span className="text-xs text-gray-400">{formatDate(n.createdAt)}</span>
+                    <span className="text-xs text-muted-foreground/60">{formatDate(n.createdAt)}</span>
                   </div>
                 </div>
               </Link>

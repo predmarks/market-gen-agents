@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 
 interface Props {
   marketId: string;
@@ -34,55 +37,61 @@ export function SuggestResolutionButton({ marketId, outcomes }: Props) {
 
   if (!open) {
     return (
-      <button
+      <Button
         onClick={() => setOpen(true)}
-        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 cursor-pointer"
+        variant="outline"
+        size="sm"
       >
         Sugerir resolución
-      </button>
+      </Button>
     );
   }
 
   return (
     <div className="mt-3 space-y-3">
       <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500">Resultado:</span>
+        <span className="text-xs text-muted-foreground">Resultado:</span>
         {outcomes.map((o) => (
-          <button
+          <Button
             key={o}
             onClick={() => setOutcome(o)}
-            className={`px-3 py-1 text-xs font-medium rounded-full border cursor-pointer transition-colors ${
+            variant="outline"
+            size="sm"
+            className={cn(
+              'rounded-full',
               outcome === o
-                ? 'bg-green-100 border-green-300 text-green-700'
-                : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
-            }`}
+                ? 'bg-green-100 border-green-300 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300'
+                : 'bg-background border-border text-muted-foreground hover:border-foreground/30'
+            )}
           >
             {o}
-          </button>
+          </Button>
         ))}
       </div>
-      <textarea
+      <Textarea
         value={evidence}
         onChange={(e) => setEvidence(e.target.value)}
         placeholder="Evidencia: ¿por qué este resultado? (ej: Según [fuente], el valor fue X el día Y...)"
-        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400 resize-none"
+        className="resize-none focus-visible:ring-amber-400"
         rows={2}
         autoFocus
       />
       <div className="flex items-center gap-2">
-        <button
+        <Button
           onClick={handleSubmit}
           disabled={loading || !evidence.trim()}
-          className="px-3 py-1.5 text-sm font-medium rounded-md bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50 transition-colors cursor-pointer"
+          size="sm"
+          className="bg-amber-500 hover:bg-amber-600 text-white dark:bg-amber-600 dark:hover:bg-amber-500"
         >
           {loading ? 'Enviando...' : 'Sugerir'}
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => { setOpen(false); setEvidence(''); }}
-          className="px-3 py-1.5 text-sm font-medium rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors cursor-pointer"
+          variant="ghost"
+          size="sm"
         >
           Cancelar
-        </button>
+        </Button>
       </div>
     </div>
   );

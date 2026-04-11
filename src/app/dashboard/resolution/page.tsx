@@ -32,11 +32,11 @@ export default async function ResolutionPage() {
       <h1 className="text-2xl font-bold mb-6">Resolución</h1>
 
       {results.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
+        <div className="text-center py-12 text-muted-foreground">
           No hay mercados cerrados pendientes de resolución.
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
+        <div className="bg-card rounded-lg border border-border divide-y divide-border">
           {results.map((market) => {
             const resolution = market.resolution as Resolution | null;
 
@@ -44,26 +44,26 @@ export default async function ResolutionPage() {
               <Link
                 key={market.id}
                 href={`/dashboard/markets/${market.id}`}
-                className="block px-4 py-3 hover:bg-gray-50 transition-colors"
+                className="block px-4 py-3 hover:bg-muted transition-colors"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium text-gray-900 truncate">
+                    <p className="font-medium text-foreground truncate">
                       {market.title}
                     </p>
                     <div className="flex items-center gap-3 mt-1">
                       <StatusBadge status={market.status as MarketStatus} />
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-muted-foreground">
                         {market.category}
                       </span>
                       {resolution && (
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-muted-foreground">
                           Sugerido: {resolution.suggestedOutcome} ({resolution.confidence})
                         </span>
                       )}
                     </div>
                   </div>
-                  <div className="text-right text-xs text-gray-500 shrink-0">
+                  <div className="text-right text-xs text-muted-foreground shrink-0">
                     <div>Cerró: {formatTimestamp(market.endTimestamp, tz)}</div>
                   </div>
                 </div>

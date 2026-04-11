@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { SourcingStep } from '@/db/types';
 
 interface SourcingRun {
@@ -36,18 +38,18 @@ function StepIndicator({ step }: { step: SourcingStep }) {
     step.status === 'running' ? '\u25CF' :
     step.status === 'error' ? '\u2717' : '\u25CB';
 
-  const color = step.status === 'done' ? 'text-green-600' :
-    step.status === 'running' ? 'text-blue-600 animate-pulse' :
-    step.status === 'error' ? 'text-red-600' : 'text-gray-400';
+  const color = step.status === 'done' ? 'text-green-600 dark:text-green-400' :
+    step.status === 'running' ? 'text-blue-600 dark:text-blue-400 animate-pulse' :
+    step.status === 'error' ? 'text-destructive' : 'text-muted-foreground/60';
 
   return (
     <div className="flex items-center gap-2 py-0.5">
-      <span className={`text-xs font-mono w-3 text-center ${color}`}>{icon}</span>
-      <span className={`text-xs ${step.status === 'pending' ? 'text-gray-400' : 'text-gray-700'}`}>
+      <span className={cn('text-xs font-mono w-3 text-center', color)}>{icon}</span>
+      <span className={cn('text-xs', step.status === 'pending' ? 'text-muted-foreground/60' : 'text-foreground')}>
         {STEP_LABELS[step.name] || step.name}
       </span>
       {step.detail && (
-        <span className="text-xs text-gray-400 ml-auto">{step.detail}</span>
+        <span className="text-xs text-muted-foreground/60 ml-auto">{step.detail}</span>
       )}
     </div>
   );
@@ -146,15 +148,14 @@ export function SourcingTrigger({
 }) {
   return (
     <div className="flex flex-col items-end gap-1">
-      <button
+      <Button
         onClick={() => onTrigger()}
         disabled={triggering || hasRunning}
-        className="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition-colors"
       >
         {triggering ? 'Iniciando...' : hasRunning ? 'En progreso...' : 'Ingerir señales'}
-      </button>
+      </Button>
       {hasRunning && runningStep && (
-        <span className="text-xs text-blue-600 animate-pulse">
+        <span className="text-xs text-blue-600 dark:text-blue-400 animate-pulse">
           {STEP_LABELS[runningStep] || runningStep}...
         </span>
       )}
@@ -163,10 +164,10 @@ export function SourcingTrigger({
 }
 
 function RunSummary({ run }: { run: SourcingRun }) {
-  const statusColor = run.status === 'complete' ? 'text-green-600' :
-    run.status === 'running' ? 'text-blue-600' :
-    run.status === 'error' ? 'text-red-600' :
-    run.status === 'skipped' ? 'text-gray-500' : 'text-gray-500';
+  const statusColor = run.status === 'complete' ? 'text-green-600 dark:text-green-400' :
+    run.status === 'running' ? 'text-blue-600 dark:text-blue-400' :
+    run.status === 'error' ? 'text-destructive' :
+    run.status === 'skipped' ? 'text-muted-foreground' : 'text-muted-foreground';
 
   const statusLabel = run.status === 'complete' ? 'Completado' :
     run.status === 'running' ? 'En progreso' :
@@ -179,10 +180,10 @@ function RunSummary({ run }: { run: SourcingRun }) {
 
   return (
     <span className="flex items-center gap-2 text-xs">
-      <span className={`font-medium ${statusColor}`}>{statusLabel}</span>
-      <span className="text-gray-400">{formatDate(run.startedAt)}</span>
-      {stats && <span className="text-gray-500">{stats}</span>}
-      {run.error && <span className="text-red-500 truncate max-w-48">{run.error}</span>}
+      <span className={cn('font-medium', statusColor)}>{statusLabel}</span>
+      <span className="text-muted-foreground/60">{formatDate(run.startedAt)}</span>
+      {stats && <span className="text-muted-foreground">{stats}</span>}
+      {run.error && <span className="text-destructive truncate max-w-48">{run.error}</span>}
     </span>
   );
 }
@@ -201,10 +202,10 @@ interface Signal {
 }
 
 const TYPE_BADGE: Record<string, { label: string; className: string }> = {
-  news: { label: 'Noticia', className: 'bg-blue-100 text-blue-700' },
-  data: { label: 'Dato', className: 'bg-amber-100 text-amber-700' },
-  social: { label: 'Social', className: 'bg-purple-100 text-purple-700' },
-  event: { label: 'Evento', className: 'bg-green-100 text-green-700' },
+  news: { label: 'Noticia', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
+  data: { label: 'Dato', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+  social: { label: 'Social', className: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' },
+  event: { label: 'Evento', className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
 };
 
 function SignalList({ runId }: { runId: string }) {
@@ -232,9 +233,9 @@ function SignalList({ runId }: { runId: string }) {
     return () => { cancelled = true; };
   }, [runId]);
 
-  if (loading) return <div className="text-xs text-gray-400 py-2">Cargando...</div>;
+  if (loading) return <div className="text-xs text-muted-foreground/60 py-2">Cargando...</div>;
 
-  if (!signals || signals.length === 0) return <div className="text-xs text-gray-400 py-2">Sin datos registrados</div>;
+  if (!signals || signals.length === 0) return <div className="text-xs text-muted-foreground/60 py-2">Sin datos registrados</div>;
 
   const grouped = new Map<string, Signal[]>();
   for (const s of signals) {
@@ -247,26 +248,26 @@ function SignalList({ runId }: { runId: string }) {
     <div className="space-y-3 mt-2">
       {Array.from(grouped.entries()).map(([source, items]) => (
         <div key={source}>
-          <div className="text-xs font-medium text-gray-500 mb-1">{source} ({items.length})</div>
+          <div className="text-xs font-medium text-muted-foreground mb-1">{source} ({items.length})</div>
           <div className="space-y-1">
             {items.map((s, i) => {
               const badge = TYPE_BADGE[s.type] ?? TYPE_BADGE.news;
               return (
                 <div key={i} className="flex items-start gap-2 text-xs">
-                  <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${badge.className}`}>
+                  <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium', badge.className)}>
                     {badge.label}
                   </span>
                   {s.score != null && (
-                    <span className={`shrink-0 px-1 py-0.5 rounded text-[10px] font-mono ${
-                      s.score >= 7 ? 'bg-green-100 text-green-700' :
-                      s.score >= 4 ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-gray-100 text-gray-500'
-                    }`} title={s.scoreReason}>
+                    <span className={cn('shrink-0 px-1 py-0.5 rounded text-[10px] font-mono',
+                      s.score >= 7 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                      s.score >= 4 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                      'bg-muted text-muted-foreground'
+                    )} title={s.scoreReason}>
                       {s.score.toFixed(1)}
                     </span>
                   )}
                   <div className="min-w-0">
-                    <span className="text-gray-700">
+                    <span className="text-foreground">
                       {s.url ? (
                         <a href={s.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
                           {s.text}
@@ -274,14 +275,14 @@ function SignalList({ runId }: { runId: string }) {
                       ) : s.text}
                     </span>
                     {s.dataPoints && s.dataPoints.length > 0 && (
-                      <span className="text-gray-400 ml-1">
+                      <span className="text-muted-foreground/60 ml-1">
                         {s.dataPoints.map((dp) => {
                           const prev = dp.previousValue != null ? ` (ant: ${dp.previousValue})` : '';
                           return `${dp.currentValue} ${dp.unit}${prev}`;
                         }).join(', ')}
                       </span>
                     )}
-                    <span className="text-gray-300 ml-1">{formatDate(s.publishedAt)}</span>
+                    <span className="text-muted-foreground/50 ml-1">{formatDate(s.publishedAt)}</span>
                   </div>
                 </div>
               );
@@ -299,27 +300,27 @@ function SourcingLog({ runs, loading }: { runs: SourcingRun[]; loading: boolean 
   if (runs.length === 0 && !loading) return null;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200">
-      <div className="px-4 py-2 border-b border-gray-100">
-        <h3 className="text-sm font-medium text-gray-700">Ingestion</h3>
+    <div className="bg-card rounded-lg border border-border">
+      <div className="px-4 py-2 border-b border-border">
+        <h3 className="text-sm font-medium text-foreground">Ingestion</h3>
       </div>
       {loading && runs.length === 0 && (
-        <div className="px-4 py-3 text-xs text-gray-500">Iniciando pipeline...</div>
+        <div className="px-4 py-3 text-xs text-muted-foreground">Iniciando pipeline...</div>
       )}
-      <div className="divide-y divide-gray-50">
+      <div className="divide-y divide-border">
         {runs.map((run) => {
           const isExpanded = expandedId === run.id;
           return (
             <div key={run.id}>
               <button
                 onClick={() => setExpandedId(isExpanded ? null : run.id)}
-                className="w-full flex items-center justify-between px-4 py-2 hover:bg-gray-50 transition-colors"
+                className="w-full flex items-center justify-between px-4 py-2 hover:bg-muted transition-colors"
               >
                 <RunSummary run={run} />
-                <span className="text-gray-400 text-xs ml-2">{isExpanded ? '\u25B2' : '\u25BC'}</span>
+                <span className="text-muted-foreground/60 text-xs ml-2">{isExpanded ? '\u25B2' : '\u25BC'}</span>
               </button>
               {isExpanded && (
-                <div className="px-4 pb-3 pt-1 bg-gray-50">
+                <div className="px-4 pb-3 pt-1 bg-muted">
                   {run.steps.length > 0 && (
                     <div className="mb-2">
                       {run.steps.map((step) => (
@@ -328,7 +329,7 @@ function SourcingLog({ runs, loading }: { runs: SourcingRun[]; loading: boolean 
                     </div>
                   )}
                   {run.error && (
-                    <p className="text-xs text-red-600 bg-red-50 rounded p-2">{run.error}</p>
+                    <p className="text-xs text-destructive bg-destructive/10 rounded p-2">{run.error}</p>
                   )}
                   <SignalList runId={run.id} />
                 </div>

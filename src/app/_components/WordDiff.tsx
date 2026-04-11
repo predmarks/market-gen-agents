@@ -54,8 +54,8 @@ export function DiffTextAdded({ a, b }: { a: string; b: string }) {
   return (
     <span className="text-sm leading-relaxed">
       {segments.map((seg, i) => {
-        if (seg.type === 'equal') return <span key={i} className="text-gray-700">{seg.text}</span>;
-        if (seg.type === 'add') return <span key={i} className="bg-green-100 text-green-700">{seg.text}</span>;
+        if (seg.type === 'equal') return <span key={i} className="text-foreground">{seg.text}</span>;
+        if (seg.type === 'add') return <span key={i} className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">{seg.text}</span>;
         return null;
       })}
     </span>
@@ -67,8 +67,8 @@ export function DiffTextRemoved({ a, b }: { a: string; b: string }) {
   return (
     <span className="text-sm leading-relaxed">
       {segments.map((seg, i) => {
-        if (seg.type === 'equal') return <span key={i} className="text-gray-700">{seg.text}</span>;
-        if (seg.type === 'remove') return <span key={i} className="bg-red-100 text-red-700 line-through">{seg.text}</span>;
+        if (seg.type === 'equal') return <span key={i} className="text-foreground">{seg.text}</span>;
+        if (seg.type === 'remove') return <span key={i} className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 line-through">{seg.text}</span>;
         return null;
       })}
     </span>

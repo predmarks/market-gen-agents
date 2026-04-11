@@ -64,13 +64,13 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   const nonZero = payload.filter((p) => p.value > 0).sort((a, b) => b.value - a.value);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs max-w-xs">
-      <p className="font-medium text-gray-700 mb-1">{label} &middot; ${total.toFixed(2)}</p>
+    <div className="bg-card border border-border rounded-lg shadow-lg p-3 text-xs max-w-xs">
+      <p className="font-medium text-foreground mb-1">{label} &middot; ${total.toFixed(2)}</p>
       {nonZero.map((p) => (
         <div key={p.name} className="flex items-center gap-2 py-0.5">
           <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: p.color }} />
-          <span className="text-gray-600 flex-1 truncate">{p.name}</span>
-          <span className="font-mono text-gray-700">${p.value.toFixed(3)}</span>
+          <span className="text-muted-foreground flex-1 truncate">{p.name}</span>
+          <span className="font-mono text-foreground">${p.value.toFixed(3)}</span>
         </div>
       ))}
     </div>
@@ -80,9 +80,9 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
 export default function DailyChart({ data }: { data: DailyOpCost[] }) {
   if (data.length === 0) {
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-5">
-        <h2 className="text-sm font-medium text-gray-500 mb-2">Costo diario por operaci&oacute;n</h2>
-        <p className="text-sm text-gray-400">Sin datos</p>
+      <div className="bg-card rounded-lg border border-border p-5">
+        <h2 className="text-sm font-medium text-muted-foreground mb-2">Costo diario por operaci&oacute;n</h2>
+        <p className="text-sm text-muted-foreground/60">Sin datos</p>
       </div>
     );
   }
@@ -95,8 +95,8 @@ export default function DailyChart({ data }: { data: DailyOpCost[] }) {
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5">
-      <h2 className="text-sm font-medium text-gray-500 mb-4">Costo diario por operaci&oacute;n (30 d&iacute;as)</h2>
+    <div className="bg-card rounded-lg border border-border p-5">
+      <h2 className="text-sm font-medium text-muted-foreground mb-4">Costo diario por operaci&oacute;n (30 d&iacute;as)</h2>
       <ResponsiveContainer width="100%" height={280}>
         <BarChart data={rows} onClick={(e: Record<string, unknown>) => {
           const payload = (e?.activePayload as Array<{ payload: ChartRow }> | undefined)?.[0]?.payload;
@@ -104,18 +104,18 @@ export default function DailyChart({ data }: { data: DailyOpCost[] }) {
         }}>
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 10, fill: '#9ca3af' }}
+            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
             tickLine={false}
-            axisLine={{ stroke: '#e5e7eb' }}
+            axisLine={{ stroke: 'hsl(var(--border))' }}
           />
           <YAxis
-            tick={{ fontSize: 10, fill: '#9ca3af' }}
+            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
             tickLine={false}
             axisLine={false}
             tickFormatter={(v: number) => `$${v}`}
             width={50}
           />
-          <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f9fafb' }} />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted))' }} />
           <Legend
             wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
             iconSize={10}

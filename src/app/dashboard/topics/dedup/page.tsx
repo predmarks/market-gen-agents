@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface TopicInfo {
   id: string;
@@ -32,9 +34,9 @@ interface Signal {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  active: 'bg-green-100 text-green-700',
-  regular: 'bg-blue-100 text-blue-700',
-  stale: 'bg-yellow-100 text-yellow-700',
+  active: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  regular: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  stale: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
 };
 
 function TopicSide({
@@ -56,30 +58,30 @@ function TopicSide({
     <div className="flex-1 min-w-0 p-4 space-y-2">
       {/* Header */}
       <div className="flex items-start gap-2">
-        <Link href={`/dashboard/topics/${topic.slug}`} className="text-sm font-medium text-blue-600 hover:underline flex-1">
+        <Link href={`/dashboard/topics/${topic.slug}`} className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline flex-1">
           {topic.name}
         </Link>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[topic.status] ?? 'bg-gray-100 text-gray-600'}`}>
+        <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium', STATUS_BADGE[topic.status] ?? 'bg-muted text-muted-foreground')}>
           {topic.status}
         </span>
       </div>
 
       {/* Meta */}
-      <div className="flex gap-3 text-[10px] text-gray-400">
+      <div className="flex gap-3 text-[10px] text-muted-foreground/60">
         <span>Score: {topic.score.toFixed(1)}</span>
         <span>{topic.category}</span>
         <span>{topic.signalCount} signals</span>
       </div>
 
       {/* Summary */}
-      <p className="text-xs text-gray-600 leading-relaxed">{topic.summary}</p>
+      <p className="text-xs text-muted-foreground leading-relaxed">{topic.summary}</p>
 
       {/* Angles */}
       {topic.suggestedAngles.length > 0 && (
         <div className="space-y-0.5">
-          <span className="text-[10px] text-gray-400">Angles:</span>
+          <span className="text-[10px] text-muted-foreground/60">Angles:</span>
           {topic.suggestedAngles.map((a, i) => (
-            <p key={i} className="text-[11px] text-gray-500 pl-2">- {a}</p>
+            <p key={i} className="text-[11px] text-muted-foreground pl-2">- {a}</p>
           ))}
         </div>
       )}
@@ -91,22 +93,22 @@ function TopicSide({
             if (!expanded && !signals) onLoadSignals();
             setExpanded(!expanded);
           }}
-          className="text-[10px] text-blue-600 hover:underline cursor-pointer"
+          className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
         >
           {expanded ? '▼' : '▶'} {topic.signalCount} señales
         </button>
         {expanded && (
           <div className="mt-1 space-y-1 max-h-48 overflow-y-auto">
             {signals === null ? (
-              <p className="text-[10px] text-gray-400">Cargando...</p>
+              <p className="text-[10px] text-muted-foreground/60">Cargando...</p>
             ) : signals.length === 0 ? (
-              <p className="text-[10px] text-gray-400">Sin señales</p>
+              <p className="text-[10px] text-muted-foreground/60">Sin señales</p>
             ) : (
               signals.map((s) => (
-                <div key={s.id} className="text-[11px] text-gray-600 py-0.5">
-                  <span className="text-gray-400">[{s.source}]</span>{' '}
+                <div key={s.id} className="text-[11px] text-muted-foreground py-0.5">
+                  <span className="text-muted-foreground/60">[{s.source}]</span>{' '}
                   {s.url ? (
-                    <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                    <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
                       {s.text.slice(0, 120)}
                     </a>
                   ) : (
@@ -120,13 +122,15 @@ function TopicSide({
       </div>
 
       {/* Merge button */}
-      <button
+      <Button
+        variant="outline"
+        size="sm"
         onClick={onMerge}
         disabled={merging}
-        className="w-full mt-2 px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+        className="w-full mt-2 border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-900/30"
       >
         {merging ? 'Fusionando...' : '◀ Conservar este'}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -272,45 +276,48 @@ export default function DedupPage() {
     <div className="max-w-5xl">
       <div className="flex items-baseline justify-between mb-4">
         <h1 className="text-2xl font-bold">Temas duplicados</h1>
-        <Link href="/dashboard/topics" className="text-sm text-blue-600 hover:underline">
+        <Link href="/dashboard/topics" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
           ← Volver a temas
         </Link>
       </div>
 
-      {loading && <p className="text-sm text-gray-500">Calculando similitud...</p>}
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {loading && <p className="text-sm text-muted-foreground">Calculando similitud...</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {/* Batch action bar */}
       {!loading && activePairs.length > 0 && (
-        <div className="sticky top-0 z-10 bg-white border border-gray-200 rounded-lg p-3 flex items-center gap-3 shadow-sm">
-          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-            <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="rounded border-gray-300" />
+        <div className="sticky top-0 z-10 bg-card border border-border rounded-lg p-3 flex items-center gap-3 shadow-sm">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="rounded border-border" />
             {allSelected ? 'Deseleccionar' : 'Seleccionar'} todos
           </label>
           {selected.size > 0 && (
             <>
-              <span className="text-xs text-gray-400">{selected.size} seleccionados</span>
-              <button
+              <span className="text-xs text-muted-foreground/60">{selected.size} seleccionados</span>
+              <Button
+                variant="outline"
+                size="xs"
                 onClick={batchDismiss}
                 disabled={batchProcessing}
-                className="text-xs px-3 py-1 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer disabled:opacity-50"
               >
                 Descartar {selected.size}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
                 onClick={batchAutoMerge}
                 disabled={batchProcessing}
-                className="text-xs px-3 py-1 rounded-full border border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 cursor-pointer disabled:opacity-50"
+                className="border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 dark:border-blue-700 dark:text-blue-300 dark:bg-blue-900/20 dark:hover:bg-blue-900/40"
               >
                 {batchProcessing ? 'Fusionando...' : `Auto-merge ${selected.size} (mayor señales)`}
-              </button>
+              </Button>
             </>
           )}
         </div>
       )}
 
       {!loading && activePairs.length === 0 && (
-        <p className="text-sm text-gray-500">No hay duplicados pendientes de revisión.</p>
+        <p className="text-sm text-muted-foreground">No hay duplicados pendientes de revisión.</p>
       )}
 
       <div className="space-y-4">
@@ -319,30 +326,30 @@ export default function DedupPage() {
           const pairKey = String(i);
 
           return (
-            <div key={pairKey} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div key={pairKey} className="bg-card rounded-lg border border-border overflow-hidden">
               {/* Header */}
-              <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
+              <div className="flex items-center justify-between px-4 py-2 bg-muted border-b border-border">
                 <div className="flex items-center gap-3">
                   <input
                     type="checkbox"
                     checked={selected.has(pairKey)}
                     onChange={() => toggleSelect(pairKey)}
-                    className="rounded border-gray-300"
+                    className="rounded border-border"
                   />
-                  <span className="text-xs font-mono text-gray-500">
+                  <span className="text-xs font-mono text-muted-foreground">
                     {Math.round(pair.similarity * 100)}% similar
                   </span>
                 </div>
                 <button
                   onClick={() => handleDismiss(pairKey)}
-                  className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
+                  className="text-xs text-muted-foreground/60 hover:text-muted-foreground cursor-pointer"
                 >
                   No son duplicados
                 </button>
               </div>
 
               {/* Side by side */}
-              <div className="flex divide-x divide-gray-100">
+              <div className="flex divide-x divide-border">
                 <TopicSide
                   topic={pair.a}
                   signals={signalCache[pair.a.id] ?? null}
@@ -364,7 +371,7 @@ export default function DedupPage() {
       </div>
 
       {!loading && activePairs.length > 0 && (
-        <p className="text-xs text-gray-400 mt-4 text-center">
+        <p className="text-xs text-muted-foreground/60 mt-4 text-center">
           {activePairs.length} pares pendientes de {pairs.length} totales
         </p>
       )}

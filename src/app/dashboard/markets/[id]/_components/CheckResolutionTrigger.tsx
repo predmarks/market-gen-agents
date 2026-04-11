@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
 
 interface Props {
   marketId: string;
@@ -45,7 +46,7 @@ export function CheckResolutionTrigger({ marketId, checkingAt }: Props) {
     <div className="flex items-center justify-between">
       <div>
         <h2 className="text-lg font-bold">En resolución</h2>
-        <p className="text-sm text-gray-600 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           {status === 'loading' ? 'Lanzando verificación...' :
            status === 'triggered' ? 'Verificación en curso. La página se actualizará automáticamente.' :
            status === 'error' ? 'Error al lanzar verificación.' :
@@ -53,12 +54,14 @@ export function CheckResolutionTrigger({ marketId, checkingAt }: Props) {
         </p>
       </div>
       {(status === 'idle' || status === 'error') && (
-        <button
+        <Button
           onClick={trigger}
-          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 text-amber-700 bg-amber-100 hover:bg-amber-200 cursor-pointer"
+          variant="outline"
+          size="sm"
+          className="border-amber-300 text-amber-700 bg-amber-100 hover:bg-amber-200 dark:border-amber-700 dark:text-amber-300 dark:bg-amber-900/30 dark:hover:bg-amber-900/50"
         >
           Verificar resolución
-        </button>
+        </Button>
       )}
       {status === 'loading' && (
         <span className="text-xs text-amber-600 animate-pulse">Procesando...</span>

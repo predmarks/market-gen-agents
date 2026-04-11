@@ -2,58 +2,50 @@
 
 import { useActionState } from 'react';
 import { login } from './actions';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(login, null);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-8">
-        <h1 className="text-xl font-bold text-gray-900 mb-6">Predmarks</h1>
-        <form action={formAction} className="space-y-4">
-          <div>
-            <label
-              htmlFor="username"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Usuario
-            </label>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              required
-              autoFocus
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Contraseña
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-            />
-          </div>
-          {state?.error && (
-            <p className="text-sm text-red-600">{state.error}</p>
-          )}
-          <button
-            type="submit"
-            disabled={pending}
-            className="w-full py-2 px-4 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-800 disabled:opacity-50"
-          >
-            {pending ? 'Ingresando...' : 'Ingresar'}
-          </button>
-        </form>
-      </div>
+    <div className="min-h-screen flex items-center justify-center">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle className="text-xl">Predmarks</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={formAction} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">Usuario</Label>
+              <Input
+                id="username"
+                name="username"
+                type="text"
+                required
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Contraseña</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                required
+              />
+            </div>
+            {state?.error && (
+              <p className="text-sm text-destructive">{state.error}</p>
+            )}
+            <Button type="submit" disabled={pending} className="w-full">
+              {pending ? 'Ingresando...' : 'Ingresar'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

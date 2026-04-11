@@ -8,6 +8,7 @@ import type { MarketStatus, TimingSafety } from '@/db/types';
 import { StatusBadge } from '../_components/StatusBadge';
 import { TimingSafetyIndicator } from '../_components/TimingSafetyIndicator';
 import { getUserTimezone } from '@/lib/timezone';
+import { cn } from '@/lib/utils';
 
 function formatTimestamp(ts: number, tz: string): string {
   return new Intl.DateTimeFormat('es-AR', {
@@ -42,15 +43,15 @@ export default async function OpenMarketsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Abiertos</h1>
-        <span className="text-sm text-gray-500">{results.length} mercados</span>
+        <span className="text-sm text-muted-foreground">{results.length} mercados</span>
       </div>
 
       {results.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
+        <div className="text-center py-12 text-muted-foreground">
           No hay mercados abiertos.
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
+        <div className="bg-card rounded-lg border border-border divide-y divide-border">
           {results.map((market) => {
             const remaining = timeRemaining(market.endTimestamp);
 
@@ -58,16 +59,16 @@ export default async function OpenMarketsPage() {
               <Link
                 key={market.id}
                 href={`/dashboard/markets/${market.id}`}
-                className="block px-4 py-3 hover:bg-gray-50 transition-colors"
+                className="block px-4 py-3 hover:bg-muted transition-colors"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium text-gray-900 truncate">
+                    <p className="font-medium text-foreground truncate">
                       {market.title}
                     </p>
                     <div className="flex items-center gap-3 mt-1">
                       <StatusBadge status={market.status as MarketStatus} />
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-muted-foreground">
                         {market.category}
                       </span>
                       <TimingSafetyIndicator
@@ -76,10 +77,10 @@ export default async function OpenMarketsPage() {
                     </div>
                   </div>
                   <div className="text-right text-xs shrink-0">
-                    <div className="text-gray-500">
+                    <div className="text-muted-foreground">
                       Cierre: {formatTimestamp(market.endTimestamp, tz)}
                     </div>
-                    <div className={remaining.urgent ? 'text-red-600 font-medium' : 'text-gray-500'}>
+                    <div className={cn(remaining.urgent ? 'text-destructive font-medium' : 'text-muted-foreground')}>
                       {remaining.text}
                     </div>
                   </div>

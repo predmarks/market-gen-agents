@@ -1,18 +1,28 @@
 'use client';
 
-import { useEffect, useState, type ComponentType } from 'react';
+import { useEffect, type ComponentType } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAccount } from 'wagmi';
+import { useTheme } from 'next-themes';
 import dynamic from 'next/dynamic';
 import { logout } from '../login/actions';
 import { MAINNET_CHAIN_ID, TESTNET_CHAIN_ID } from '@/lib/chains';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Zap, BookOpen, TrendingUp, Wallet, Mail,
   Radio, Scale, Activity, BarChart3,
-  Settings, ChevronDown,
+  Settings, ChevronDown, Moon, Sun, Monitor,
   type LucideProps,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const WalletButton = dynamic(
   () => import('./WalletButton').then((m) => ({ default: m.WalletButton })),
@@ -31,11 +41,10 @@ export function Nav() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { chainId: walletChainId, isConnected } = useAccount();
-  const [systemOpen, setSystemOpen] = useState(false);
+  const { setTheme } = useTheme();
 
   const chainParam = searchParams.get('chain');
 
-  // Sync wallet chain to URL search param
   useEffect(() => {
     if (!isConnected || !walletChainId) return;
     const targetChain = walletChainId === TESTNET_CHAIN_ID ? TESTNET_CHAIN_ID : MAINNET_CHAIN_ID;
@@ -52,7 +61,6 @@ export function Nav() {
     }
   }, [walletChainId, isConnected, pathname, chainParam, searchParams, router]);
 
-  // Preserve chain param across nav links
   function withChain(href: string): string {
     if (!chainParam) return href;
     return `${href}?chain=${chainParam}`;
@@ -66,7 +74,10 @@ export function Nav() {
       <Link
         key={href}
         href={withChain(href)}
-        className={`flex items-center gap-1.5 text-sm ${isActive ? 'text-gray-900 font-medium' : 'text-gray-600 hover:text-gray-900'}`}
+        className={cn(
+          'flex items-center gap-1.5 text-sm',
+          isActive ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'
+        )}
       >
         <Icon size={16} />
         {label}
@@ -77,14 +88,14 @@ export function Nav() {
   const systemActive = systemLinks.some((l) => pathname.startsWith(l.href));
 
   return (
-    <nav className="bg-white border-b border-gray-200 px-4 md:px-6 py-3">
+    <nav className="bg-background border-b border-border px-4 md:px-6 py-3">
       <div className="flex items-center gap-4 md:gap-6">
         <div className="flex items-center gap-4 md:gap-6 overflow-x-auto min-w-0 flex-1">
-          <Link href={withChain('/')} className="text-lg font-bold text-gray-900 shrink-0">
+          <Link href={withChain('/')} className="text-lg font-bold text-foreground shrink-0">
             Predmarks
           </Link>
           {Number(searchParams.get('chain')) === TESTNET_CHAIN_ID && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 shrink-0">Testnet</span>
+            <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 shrink-0">Testnet</Badge>
           )}
 
           {navLink('/', 'Live', Zap)}
@@ -96,45 +107,62 @@ export function Nav() {
 
         <div className="flex items-center gap-3 shrink-0">
           {/* Sistema dropdown */}
-          <div className="relative" onMouseEnter={() => setSystemOpen(true)} onMouseLeave={() => setSystemOpen(false)}>
-            <button
-              type="button"
-              className={`flex items-center gap-1.5 text-sm ${systemActive ? 'text-gray-900 font-medium' : 'text-gray-600 hover:text-gray-900'}`}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={cn(
+                'flex items-center gap-1.5 text-sm outline-none',
+                systemActive ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'
+              )}
             >
               <Settings size={16} />
               Sistema
-              <ChevronDown size={14} className={`transition-transform ${systemOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {systemOpen && (
-              <div className="absolute right-0 top-full pt-2 w-44 z-50">
-                <div className="bg-white border border-gray-200 rounded-lg shadow-lg py-1">
-                  {systemLinks.map(({ href, label, icon: Icon }) => {
-                    const isActive = pathname.startsWith(href);
-                    return (
-                      <Link
-                        key={href}
-                        href={withChain(href)}
-                        onClick={() => setSystemOpen(false)}
-                        className={`flex items-center gap-2 px-3 py-2 text-sm ${isActive ? 'text-gray-900 font-medium bg-gray-50' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
-                      >
-                        <Icon size={16} />
-                        {label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
+              <ChevronDown size={14} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={8}>
+              {systemLinks.map(({ href, label, icon: Icon }) => {
+                const isActive = pathname.startsWith(href);
+                return (
+                  <DropdownMenuItem
+                    key={href}
+                    className={cn(isActive && 'font-medium')}
+                    onClick={() => router.push(withChain(href))}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Theme toggle */}
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" />}>
+              <Sun size={14} className="rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+              <Moon size={14} className="absolute rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+              <span className="sr-only">Cambiar tema</span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setTheme('light')}>
+                <Sun size={14} />
+                Claro
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme('dark')}>
+                <Moon size={14} />
+                Oscuro
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme('system')}>
+                <Monitor size={14} />
+                Sistema
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <WalletButton />
           <form action={logout}>
-            <button
-              type="submit"
-              className="text-sm text-gray-600 hover:text-gray-900"
-            >
+            <Button type="submit" variant="ghost" size="sm" className="text-muted-foreground">
               Salir
-            </button>
+            </Button>
           </form>
         </div>
       </div>

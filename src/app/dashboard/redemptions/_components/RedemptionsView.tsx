@@ -3,6 +3,9 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 export interface LiquidityMarket {
   marketAddress: string;
@@ -95,13 +98,13 @@ function OwnedAddressesModal({
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       {/* Modal */}
-      <div className="relative bg-white rounded-lg border border-gray-200 shadow-lg w-full max-w-md mx-4 p-5">
+      <div className="relative bg-card rounded-lg border border-border shadow-lg w-full max-w-md mx-4 p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-gray-800">Direcciones propias</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer text-lg leading-none">&times;</button>
+          <h3 className="text-sm font-semibold text-foreground">Direcciones propias</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer text-lg leading-none">&times;</button>
         </div>
 
-        <p className="text-xs text-gray-500 mb-3">
+        <p className="text-xs text-muted-foreground mb-3">
           Las posiciones de estas direcciones se muestran por separado y no cuentan como retiros pendientes.
         </p>
 
@@ -109,11 +112,11 @@ function OwnedAddressesModal({
         {list.length > 0 ? (
           <div className="space-y-1 mb-3 max-h-48 overflow-y-auto">
             {list.map((a) => (
-              <div key={a} className="flex items-center justify-between bg-gray-50 rounded px-2 py-1">
-                <span className="text-xs font-mono text-gray-700">{a}</span>
+              <div key={a} className="flex items-center justify-between bg-muted rounded px-2 py-1">
+                <span className="text-xs font-mono text-foreground">{a}</span>
                 <button
                   onClick={() => handleRemove(a)}
-                  className="text-red-400 hover:text-red-600 text-xs cursor-pointer ml-2"
+                  className="text-destructive/60 hover:text-destructive text-xs cursor-pointer ml-2"
                 >
                   &times;
                 </button>
@@ -121,44 +124,34 @@ function OwnedAddressesModal({
             ))}
           </div>
         ) : (
-          <p className="text-xs text-gray-400 mb-3">Sin direcciones configuradas.</p>
+          <p className="text-xs text-muted-foreground/60 mb-3">Sin direcciones configuradas.</p>
         )}
 
         {/* Add input */}
         <div className="flex gap-2 mb-3">
-          <input
+          <Input
             type="text"
             value={input}
             onChange={(e) => { setInput(e.target.value); setError(null); }}
             onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
             placeholder="0x..."
-            className="flex-1 px-2 py-1.5 text-xs font-mono border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400"
+            className="flex-1 text-xs font-mono"
           />
-          <button
-            onClick={handleAdd}
-            className="px-3 py-1.5 text-xs font-medium rounded bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer"
-          >
+          <Button variant="secondary" size="sm" onClick={handleAdd}>
             Agregar
-          </button>
+          </Button>
         </div>
 
-        {error && <p className="text-xs text-red-500 mb-3">{error}</p>}
+        {error && <p className="text-xs text-destructive mb-3">{error}</p>}
 
         {/* Save */}
         <div className="flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 text-xs font-medium rounded border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer"
-          >
+          <Button variant="outline" size="sm" onClick={onClose}>
             Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-3 py-1.5 text-xs font-medium rounded bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 cursor-pointer"
-          >
+          </Button>
+          <Button size="sm" onClick={handleSave} disabled={saving}>
             {saving ? 'Guardando...' : 'Guardar'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -177,35 +170,35 @@ function PositionsTable({
   muted?: boolean;
 }) {
   if (positions.length === 0) return null;
-  const textClass = muted ? 'text-gray-400' : 'text-gray-700';
-  const linkClass = muted ? 'text-gray-400 hover:text-gray-600' : 'text-blue-600 hover:underline';
+  const textClass = muted ? 'text-muted-foreground/60' : 'text-foreground';
+  const linkClass = muted ? 'text-muted-foreground/60 hover:text-muted-foreground' : 'text-blue-600 dark:text-blue-400 hover:underline';
 
   return (
     <table className="w-full text-xs">
       <thead>
-        <tr className="text-left text-gray-400 border-b border-gray-100">
+        <tr className="text-left text-muted-foreground/60 border-b border-border">
           <th className="px-4 py-1.5 font-medium">Cuenta</th>
           <th className="px-4 py-1.5 font-medium text-right">Shares</th>
           <th className="px-4 py-1.5 font-medium text-right">Invertido</th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-gray-50">
+      <tbody className="divide-y divide-border">
         {positions.map((p) => (
-          <tr key={p.id} className="hover:bg-gray-50">
+          <tr key={p.id} className="hover:bg-muted">
             <td className="px-4 py-1.5">
               <a
                 href={`${basescanUrl}/address/${p.account}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`font-mono ${linkClass}`}
+                className={cn('font-mono', linkClass)}
               >
                 {addr(p.account)}
               </a>
             </td>
-            <td className={`px-4 py-1.5 text-right font-mono ${textClass}`}>
+            <td className={cn('px-4 py-1.5 text-right font-mono', textClass)}>
               {formatUsdc(p.shares)}
             </td>
-            <td className={`px-4 py-1.5 text-right font-mono ${textClass}`}>
+            <td className={cn('px-4 py-1.5 text-right font-mono', textClass)}>
               {formatUsdc(p.invested)}
             </td>
           </tr>
@@ -238,22 +231,23 @@ export function RedemptionsView({ markets, ownedAddresses, basescanUrl }: Props)
       {/* Page header */}
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-2xl font-bold">Liquidity</h1>
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => setShowModal(true)}
-          className="px-3 py-1.5 text-xs font-medium rounded border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer"
         >
           Direcciones propias{ownedAddresses.length > 0 ? ` (${ownedAddresses.length})` : ''}
-        </button>
+        </Button>
       </div>
 
-      <p className="text-sm text-gray-500 mb-6">
+      <p className="text-sm text-muted-foreground mb-6">
         {filtered.length === 0
           ? 'No hay mercados con liquidez o retiros pendientes.'
           : `${filtered.length} mercado${filtered.length !== 1 ? 's' : ''} con liquidez o retiros pendientes.`}
       </p>
 
       {filtered.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">Sin pendientes</div>
+        <div className="text-center py-12 text-muted-foreground/60">Sin pendientes</div>
       ) : (
         <>
           <div className="space-y-4">
@@ -270,48 +264,48 @@ export function RedemptionsView({ markets, ownedAddresses, basescanUrl }: Props)
                 : 'pending';
 
               return (
-                <div key={s.onchainId || s.marketAddress} className="bg-white rounded-lg border border-gray-200">
-                  <div className="px-4 py-3 border-b border-gray-100 flex items-start justify-between gap-4">
+                <div key={s.onchainId || s.marketAddress} className="bg-card rounded-lg border border-border">
+                  <div className="px-4 py-3 border-b border-border flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       {s.dbId ? (
-                        <Link href={`/dashboard/markets/${s.dbId}`} className="text-blue-600 hover:underline font-medium text-sm">
+                        <Link href={`/dashboard/markets/${s.dbId}`} className="text-blue-600 dark:text-blue-400 hover:underline font-medium text-sm">
                           {s.dbTitle ?? s.marketName}
                         </Link>
                       ) : (
-                        <span className="text-gray-700 font-medium text-sm">{s.marketName}</span>
+                        <span className="text-foreground font-medium text-sm">{s.marketName}</span>
                       )}
                       {s.marketAddress && (
-                        <span className="block text-xs text-gray-400 font-mono mt-0.5">{addr(s.marketAddress)}</span>
+                        <span className="block text-xs text-muted-foreground/60 font-mono mt-0.5">{addr(s.marketAddress)}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       {resolvedOutcome && (
-                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
                           {resolvedOutcome}
                         </span>
                       )}
                       {hasPendingBalance && (
-                        <span className="text-xs text-gray-700 font-mono font-semibold">
+                        <span className="text-xs text-foreground font-mono font-semibold">
                           {formatUsdc(s.pendingBalance!)}
                         </span>
                       )}
                       {hasPendingBalance && withdrawalStatus === 'in_progress' && (
-                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                           Retiro en progreso
                         </span>
                       )}
                       {hasPendingBalance && withdrawalStatus === 'pending' && (
-                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
                           Liquidez pendiente
                         </span>
                       )}
                       {s.external.length > 0 && (
-                        <span className="text-xs text-amber-600 font-semibold">
+                        <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold">
                           {s.external.length} sin redimir
                         </span>
                       )}
                       {s.owned.length > 0 && (
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-muted-foreground/60">
                           +{s.owned.length} propias
                         </span>
                       )}
@@ -330,7 +324,7 @@ export function RedemptionsView({ markets, ownedAddresses, basescanUrl }: Props)
             <div className="mt-6">
               <button
                 onClick={() => setShowOwned(!showOwned)}
-                className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
+                className="text-xs text-muted-foreground/60 hover:text-muted-foreground cursor-pointer"
               >
                 {showOwned ? '▼' : '▶'} Direcciones propias ({filtered.reduce((s, m) => s + m.owned.length, 0)} posiciones en {filtered.filter((m) => m.owned.length > 0).length} mercados)
               </button>
@@ -343,12 +337,12 @@ export function RedemptionsView({ markets, ownedAddresses, basescanUrl }: Props)
                       : s.resolvedTo > 0 ? `#${s.resolvedTo}` : null;
 
                     return (
-                      <div key={`owned-${s.onchainId || s.marketAddress}`} className="bg-gray-50 rounded-lg border border-gray-100">
-                        <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between gap-4">
-                          <span className="text-xs text-gray-500 truncate">
+                      <div key={`owned-${s.onchainId || s.marketAddress}`} className="bg-muted rounded-lg border border-border">
+                        <div className="px-4 py-2 border-b border-border flex items-center justify-between gap-4">
+                          <span className="text-xs text-muted-foreground truncate">
                             {s.dbTitle ?? s.marketName}
                           </span>
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-muted-foreground/60">
                             {resolvedOutcome ?? '—'} — {s.owned.length} posicion{s.owned.length !== 1 ? 'es' : ''}
                           </span>
                         </div>

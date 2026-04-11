@@ -4,6 +4,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { MAINNET_CHAIN_ID } from '@/lib/chains';
 import { strip } from '@/lib/strip-diacritics';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 interface MarketEntry {
   id: string;
@@ -34,7 +39,6 @@ function formatEndDate(ts: number): string {
 }
 
 function formatVolume(vol: string): string {
-  // Volume is in smallest token unit (6 decimals for USDC)
   const n = parseFloat(vol) / 1e6;
   if (isNaN(n) || n === 0) return '0';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -61,7 +65,6 @@ export function MarketList({ markets, chainId }: { markets: MarketEntry[]; chain
 
   const isTestnet = chainId !== MAINNET_CHAIN_ID;
 
-  // Clear verifying state when markets data refreshes (new props from server)
   useEffect(() => {
     if (markets !== prevMarketsRef.current) {
       setVerifyingIds(new Set());
@@ -69,7 +72,6 @@ export function MarketList({ markets, chainId }: { markets: MarketEntry[]; chain
     }
   }, [markets]);
 
-  // Background sync: pull fresh indexer data, then refresh server component
   useEffect(() => {
     setSyncing(true);
     fetch('/api/sync-stats', {
@@ -113,30 +115,30 @@ export function MarketList({ markets, chainId }: { markets: MarketEntry[]; chain
         <div className="flex items-center gap-3 shrink-0">
           <h1 className="text-3xl font-bold">Live</h1>
           {isTestnet && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">Testnet</span>
+            <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">Testnet</Badge>
           )}
           {syncing && (
-            <span className="text-xs text-gray-400 animate-pulse">Sincronizando...</span>
+            <span className="text-xs text-muted-foreground animate-pulse">Sincronizando...</span>
           )}
           {!syncing && syncResult && (syncResult.created > 0 || syncResult.updated > 0) && (
-            <span className="text-xs text-green-600">
+            <span className="text-xs text-green-600 dark:text-green-400">
               {syncResult.created > 0 && `+${syncResult.created} nuevos`}
               {syncResult.created > 0 && syncResult.updated > 0 && ', '}
               {syncResult.updated > 0 && `${syncResult.updated} actualizados`}
             </span>
           )}
         </div>
-        <input
+        <Input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Buscar mercado..."
-          className="w-full max-w-md text-xl px-3 py-1.5 border-0 border-b border-gray-200 focus:border-gray-400 focus:outline-none focus:ring-0 bg-transparent placeholder:text-gray-300 transition-colors"
+          className="max-w-md text-xl border-0 border-b border-border rounded-none bg-transparent focus-visible:ring-0 focus-visible:border-foreground"
         />
       </div>
 
       {live.length === 0 && inResolution.length === 0 && resolved.length === 0 ? (
-        <p className="text-gray-500">
+        <p className="text-muted-foreground">
           {query ? 'No hay mercados que coincidan.' : 'No hay mercados activos.'}
         </p>
       ) : (
@@ -148,7 +150,7 @@ export function MarketList({ markets, chainId }: { markets: MarketEntry[]; chain
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
                 </span>
-                <h2 className="text-sm font-medium text-amber-600 uppercase tracking-wide">
+                <h2 className="text-sm font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide">
                   Pendientes de resolución ({inResolution.length})
                 </h2>
               </div>
@@ -167,7 +169,7 @@ export function MarketList({ markets, chainId }: { markets: MarketEntry[]; chain
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
                 </span>
-                <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
                   Activos ({live.length})
                 </h2>
               </div>
@@ -185,7 +187,7 @@ export function MarketList({ markets, chainId }: { markets: MarketEntry[]; chain
                 <span className="relative flex h-2.5 w-2.5">
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-purple-500" />
                 </span>
-                <h2 className="text-sm font-medium text-purple-600 uppercase tracking-wide">
+                <h2 className="text-sm font-medium text-purple-600 dark:text-purple-400 uppercase tracking-wide">
                   Resueltos ({resolved.length})
                 </h2>
               </div>
@@ -204,57 +206,57 @@ export function MarketList({ markets, chainId }: { markets: MarketEntry[]; chain
 
 function MarketCard({ market: m, urgent = false, onCheck, verifying }: { market: MarketEntry; urgent?: boolean; onCheck?: (e: React.MouseEvent) => void; verifying?: boolean }) {
   const router = useRouter();
-  const dotColor = STATUS_DOT[m.status] ?? 'bg-gray-400';
+  const dotColor = STATUS_DOT[m.status] ?? 'bg-gray-400 dark:bg-gray-600';
   const isChecking = verifying || (m.resolution?.checkingAt && Date.now() - new Date(m.resolution.checkingAt).getTime() < 10 * 60 * 1000);
 
   const verifyButton = urgent && onCheck ? (
-    <button
+    <Button
       onClick={onCheck}
       disabled={!!isChecking}
-      className="px-3 py-1 text-xs font-medium rounded-md bg-amber-300 hover:bg-amber-400 text-amber-900 disabled:opacity-50 transition-colors cursor-pointer shrink-0"
+      size="sm"
+      className="bg-amber-300 hover:bg-amber-400 text-amber-900 dark:bg-amber-600 dark:hover:bg-amber-500 dark:text-amber-50 shrink-0"
     >
       {isChecking ? 'Verificando...' : 'Verificar'}
-    </button>
+    </Button>
   ) : null;
 
   return (
-    <div
+    <Card
       onClick={() => router.push(`/dashboard/markets/${m.id}`)}
       role="link"
-      className={`rounded-xl border p-6 transition-all block cursor-pointer ${
+      className={cn(
+        'p-6 transition-all cursor-pointer',
         urgent
-          ? 'bg-amber-50 border-amber-300 hover:border-amber-400 hover:shadow-md'
-          : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md'
-      }`}
+          ? 'bg-amber-50 border-amber-300 hover:border-amber-400 hover:shadow-md dark:bg-amber-950/30 dark:border-amber-700 dark:hover:border-amber-600'
+          : 'hover:border-blue-300 hover:shadow-md dark:hover:border-blue-700'
+      )}
     >
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
-          <span className={`inline-flex rounded-full h-2 w-2 shrink-0 ${urgent ? 'bg-amber-500' : dotColor}`} />
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-            urgent ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
-          }`}>
+          <span className={cn('inline-flex rounded-full h-2 w-2 shrink-0', urgent ? 'bg-amber-500' : dotColor)} />
+          <Badge variant={urgent ? 'processing' : 'secondary'} className={urgent ? '' : undefined}>
             {m.category}
-          </span>
+          </Badge>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {m.onchainId && (
-            <span className="text-[10px] font-mono text-gray-400">#{m.onchainId}</span>
+            <span className="text-[10px] font-mono text-muted-foreground">#{m.onchainId}</span>
           )}
           {!urgent && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-muted-foreground">
               {timeRemaining(m.endTimestamp)}
             </span>
           )}
         </div>
       </div>
-      <h2 className="text-lg font-semibold text-gray-900 mb-3 line-clamp-3">
+      <h2 className="text-lg font-semibold text-foreground mb-3 line-clamp-3">
         {m.title}
       </h2>
       {(m.resolution?.suggestedOutcome || verifyButton) && (
-        <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-md bg-amber-50 border border-amber-200">
+        <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800">
           {m.resolution?.suggestedOutcome ? (
             <>
-              <span className="text-sm font-medium text-amber-800">
+              <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
                 Resolución: {m.resolution.suggestedOutcome}
               </span>
               {m.resolution.evidenceUrls?.[0] ? (
@@ -263,34 +265,34 @@ function MarketCard({ market: m, urgent = false, onCheck, verifying }: { market:
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="text-[10px] text-blue-600 hover:underline truncate max-w-[150px]"
+                  className="text-[10px] text-blue-600 hover:underline truncate max-w-[150px] dark:text-blue-400"
                 >
                   {new URL(m.resolution.evidenceUrls[0]).hostname.replace('www.', '')}
                 </a>
               ) : (
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
-                  m.resolution.confidence === 'high' ? 'bg-green-100 text-green-700' :
-                  m.resolution.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-gray-100 text-gray-500'
-                }`}>
+                <Badge className={cn(
+                  m.resolution.confidence === 'high' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                  m.resolution.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                  'bg-muted text-muted-foreground'
+                )}>
                   {m.resolution.confidence === 'high' ? 'Alta' :
                    m.resolution.confidence === 'medium' ? 'Media' : 'Baja'}
-                </span>
+                </Badge>
               )}
             </>
           ) : (
-            <span className="text-sm text-amber-600">Sin resolución sugerida</span>
+            <span className="text-sm text-amber-600 dark:text-amber-400">Sin resolución sugerida</span>
           )}
           {verifyButton && <span className="ml-auto">{verifyButton}</span>}
         </div>
       )}
-      <div className="flex items-center justify-between text-sm text-gray-500 pt-3 border-t border-gray-100">
-        <span className="text-xs text-gray-400">
+      <div className="flex items-center justify-between text-sm text-muted-foreground pt-3 border-t border-border">
+        <span className="text-xs text-muted-foreground">
           {m.status === 'closed' && m.outcome ? `Resultado: ${m.outcome}` : `Cierre: ${formatEndDate(m.endTimestamp)}`}
         </span>
         <div className="flex items-center gap-4 ml-auto">
           {m.pendingBalance && parseFloat(m.pendingBalance) > 0 ? (
-            <span className={`font-medium ${m.status === 'closed' ? 'text-amber-600' : ''}`} title={m.status === 'closed' ? 'Liquidez pendiente' : 'Liquidez'}>
+            <span className={cn('font-medium', m.status === 'closed' && 'text-amber-600 dark:text-amber-400')} title={m.status === 'closed' ? 'Liquidez pendiente' : 'Liquidez'}>
               {m.status === 'closed' ? 'Liquidez pendiente ' : ''}${formatVolume(m.pendingBalance)}
             </span>
           ) : m.volume ? (
@@ -301,6 +303,6 @@ function MarketCard({ market: m, urgent = false, onCheck, verifying }: { market:
           )}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

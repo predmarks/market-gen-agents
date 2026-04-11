@@ -1,6 +1,8 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { ThemeProvider } from 'next-themes';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { Nav } from './Nav';
 import { PageContextProvider } from './PageContext';
 
@@ -9,6 +11,8 @@ const MiniChat = dynamic(() => import('./MiniChat').then(m => m.MiniChat), { ssr
 
 export function ClientShell({ hasSession, children }: { hasSession: boolean; children: React.ReactNode }) {
   return (
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <TooltipProvider>
     <WalletProvider>
       <PageContextProvider>
         {hasSession && <Nav />}
@@ -18,5 +22,7 @@ export function ClientShell({ hasSession, children }: { hasSession: boolean; chi
         </div>
       </PageContextProvider>
     </WalletProvider>
+    </TooltipProvider>
+    </ThemeProvider>
   );
 }

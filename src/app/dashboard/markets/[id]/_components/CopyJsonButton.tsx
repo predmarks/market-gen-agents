@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 
 export function CopyJsonButton({ json }: { json: string }) {
   const [copied, setCopied] = useState(false);
@@ -12,11 +13,12 @@ export function CopyJsonButton({ json }: { json: string }) {
   }
 
   return (
-    <button
+    <Button
       onClick={handleCopy}
-      className="px-3 py-1 text-xs font-medium rounded border border-gray-300 hover:bg-gray-50 transition-colors"
+      variant="outline"
+      size="sm"
     >
       {copied ? 'Copiado' : 'Copiar JSON'}
-    </button>
+    </Button>
   );
 }

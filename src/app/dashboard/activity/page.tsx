@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ActivityCard } from '../../_components/ActivityCard';
 import type { ActivityEntry } from '../../_components/ActivityCard';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 
 const FILTERS = ['all', 'topic', 'market', 'feedback', 'signal', 'rule', 'system'] as const;
 const FILTER_LABELS: Record<string, string> = {
@@ -42,34 +44,32 @@ export default function ActivityPage() {
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap mb-4">
         {FILTERS.map((f) => (
-          <button
+          <Button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-1 text-xs rounded-full border transition-colors cursor-pointer ${
-              filter === f
-                ? 'bg-gray-800 text-white border-gray-800'
-                : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
-            }`}
+            variant={filter === f ? 'default' : 'outline'}
+            size="xs"
+            className="rounded-full cursor-pointer"
           >
             {FILTER_LABELS[f] ?? f}
-          </button>
+          </Button>
         ))}
       </div>
 
-      {loading && <div className="text-sm text-gray-500">Cargando...</div>}
+      {loading && <div className="text-sm text-muted-foreground">Cargando...</div>}
 
       {!loading && entries.length === 0 && (
-        <div className="text-sm text-gray-500">No hay actividad registrada</div>
+        <div className="text-sm text-muted-foreground">No hay actividad registrada</div>
       )}
 
       {entries.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-50">
+        <Card className="divide-y divide-border">
           {entries.map((entry) => (
             <div key={entry.id} id={`entry-${entry.id}`} className="px-4 py-2.5">
               <ActivityCard entry={entry} />
             </div>
           ))}
-        </div>
+        </Card>
       )}
     </div>
   );

@@ -13,6 +13,10 @@ import {
   ORACLE_ADDRESSES,
 } from '@/lib/contracts';
 import { getBasescanUrl } from '@/lib/chains';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface DeployableMarket {
   name: string;
@@ -36,8 +40,8 @@ type Step =
 function Param({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between text-[11px]">
-      <span className="text-gray-500">{label}</span>
-      <span className="text-gray-800 font-mono">{value}</span>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-foreground font-mono">{value}</span>
     </div>
   );
 }
@@ -60,7 +64,6 @@ export function DeployMarketButton({ marketId }: Props) {
   const collateralToken = COLLATERAL_TOKENS[chainId];
   const oracleAddress = ORACLE_ADDRESSES[chainId];
 
-  // Read token decimals
   const { data: tokenDecimals } = useReadContract({
     address: collateralToken ?? undefined,
     abi: ERC20_ABI,
@@ -100,12 +103,10 @@ export function DeployMarketButton({ marketId }: Props) {
     setTxHash(null);
 
     try {
-      // Fetch fresh market data right before deploying
       const fresh = await fetchDeployable();
       const fundingAmount = parseUnits(funding, decimals);
       const startTimestamp = BigInt(Math.floor(Date.now() / 1000) - 3600);
 
-      // Step 1: Check allowance and approve if needed
       if (fundingAmount > BigInt(0)) {
         const allowance = await publicClient.readContract({
           address: collateralToken,
@@ -127,7 +128,6 @@ export function DeployMarketButton({ marketId }: Props) {
         }
       }
 
-      // Step 2: Deploy market
       setStep('deploying');
       const deployTx = await walletClient.writeContract({
         address: masterAddress,
@@ -152,7 +152,6 @@ export function DeployMarketButton({ marketId }: Props) {
       setStep('confirming-deploy');
       const receipt = await publicClient.waitForTransactionReceipt({ hash: deployTx });
 
-      // Extract onchainId from MarketCreated event
       let onchainId: string | null = null;
       let onchainAddress: string | null = null;
       for (const log of receipt.logs) {
@@ -167,10 +166,9 @@ export function DeployMarketButton({ marketId }: Props) {
         } catch { /* not our event */ }
       }
 
-      // Fallback: if event parsing failed, query indexer by title
       if (!onchainId) {
         setStep('syncing');
-        await new Promise((r) => setTimeout(r, 5000)); // wait for indexer
+        await new Promise((r) => setTimeout(r, 5000));
         try {
           const matchRes = await fetch(`/api/markets/${marketId}/match-onchain?chain=${chainId}`);
           if (matchRes.ok) {
@@ -192,7 +190,6 @@ export function DeployMarketButton({ marketId }: Props) {
         oracleAddress,
       });
 
-      // Sync with indexer to fill remaining fields
       setStep('syncing');
       await new Promise((r) => setTimeout(r, 3000));
       await fetch(`/api/sync-deployed?chain=${chainId}`, { method: 'POST' });
@@ -209,8 +206,8 @@ export function DeployMarketButton({ marketId }: Props) {
 
   if (step === 'preview' && deployable) {
     return (
-      <div className="rounded-md border border-gray-200 bg-white p-4 space-y-3 text-sm">
-        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Publicar mercado onchain</p>
+      <Card className="p-4 space-y-3 text-sm">
+        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Publicar mercado onchain</p>
         <div className="space-y-1">
           <Param label="Contrato" value={`${masterAddress.slice(0, 6)}...${masterAddress.slice(-4)}`} />
           <Param label="Función" value="createCustomMarket" />
@@ -222,30 +219,30 @@ export function DeployMarketButton({ marketId }: Props) {
           <Param label="Token" value={`${collateralToken.slice(0, 6)}...${collateralToken.slice(-4)}`} />
         </div>
         <div className="flex gap-3">
-          <div className="flex-1">
-            <label className="text-[10px] text-gray-500">Funding (tokens)</label>
-            <input
+          <div className="flex-1 space-y-1">
+            <Label className="text-[10px]">Funding (tokens)</Label>
+            <Input
               type="number"
               value={funding}
               onChange={(e) => setFunding(e.target.value)}
-              className="w-full mt-0.5 px-2 py-1 text-xs border border-gray-300 rounded"
+              className="text-xs"
             />
           </div>
-          <div className="flex-1">
-            <label className="text-[10px] text-gray-500">Overround (bps)</label>
-            <input
+          <div className="flex-1 space-y-1">
+            <Label className="text-[10px]">Overround (bps)</Label>
+            <Input
               type="number"
               value={overround}
               onChange={(e) => setOverround(e.target.value)}
-              className="w-full mt-0.5 px-2 py-1 text-xs border border-gray-300 rounded"
+              className="text-xs"
             />
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleDeploy} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 cursor-pointer">Confirmar y firmar</button>
-          <button onClick={() => setStep('idle')} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">Cancelar</button>
+          <Button size="sm" onClick={handleDeploy}>Confirmar y firmar</Button>
+          <Button variant="outline" size="sm" onClick={() => setStep('idle')}>Cancelar</Button>
         </div>
-      </div>
+      </Card>
     );
   }
 
@@ -260,24 +257,25 @@ export function DeployMarketButton({ marketId }: Props) {
 
   return (
     <>
-      <button
+      <Button
+        variant="outline"
         onClick={() => {
           if (step === 'idle' || step === 'error') {
             fetchDeployable().then(() => setStep('preview')).catch((e) => { setError(e.message); setStep('error'); });
           }
         }}
         disabled={busy || step === 'done'}
-        className="px-4 py-2 text-sm font-medium rounded-md transition-colors disabled:opacity-50 border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 cursor-pointer"
+        className="border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/50 dark:text-teal-300 dark:hover:bg-teal-950"
       >
         {label}
-      </button>
+      </Button>
       {txHash && (
-        <a href={`${basescanBase}/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 hover:underline font-mono">
+        <a href={`${basescanBase}/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 dark:text-blue-400 hover:underline font-mono">
           {txHash.slice(0, 10)}...
         </a>
       )}
-      {step === 'done' && <span className="text-xs text-green-600">OK</span>}
-      {error && <span className="text-xs text-red-500 max-w-xs truncate" title={error}>Error: {error.slice(0, 60)}</span>}
+      {step === 'done' && <span className="text-xs text-green-600 dark:text-green-400">OK</span>}
+      {error && <span className="text-xs text-destructive max-w-xs truncate" title={error}>Error: {error.slice(0, 60)}</span>}
     </>
   );
 }

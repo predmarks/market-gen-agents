@@ -7,6 +7,8 @@ import { validateChainId, MAINNET_CHAIN_ID } from '@/lib/chains';
 import { usePageContext } from '@/app/_components/PageContext';
 import { SearchInput } from '@/app/dashboard/_components/SearchInput';
 import { strip } from '@/lib/strip-diacritics';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 
 interface MarketEntry {
   id: string;
@@ -59,13 +61,13 @@ function formatVolume(vol: string): string {
 }
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  candidate: { label: 'Candidato', className: 'bg-blue-100 text-blue-700' },
-  processing: { label: 'Revisando', className: 'bg-blue-100 text-blue-700' },
-  open: { label: 'Abierto', className: 'bg-indigo-100 text-indigo-700' },
-  in_resolution: { label: 'En resolución', className: 'bg-yellow-100 text-yellow-700' },
-  closed: { label: 'Resuelto', className: 'bg-purple-100 text-purple-700' },
-  rejected: { label: 'Rechazado', className: 'bg-gray-100 text-gray-500' },
-  cancelled: { label: 'Cancelado', className: 'bg-orange-100 text-orange-600' },
+  candidate: { label: 'Candidato', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
+  processing: { label: 'Revisando', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
+  open: { label: 'Abierto', className: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300' },
+  in_resolution: { label: 'En resolución', className: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' },
+  closed: { label: 'Resuelto', className: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' },
+  rejected: { label: 'Rechazado', className: 'bg-muted text-muted-foreground' },
+  cancelled: { label: 'Cancelado', className: 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300' },
 };
 
 const ARCHIVED_STATUSES = ['closed', 'rejected', 'cancelled'];
@@ -92,10 +94,10 @@ const FILTERS = [
 function ScoreBadge({ score }: { score: number }) {
   const color =
     score >= 7
-      ? 'bg-green-100 text-green-700'
+      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
       : score >= 4
-      ? 'bg-yellow-100 text-yellow-700'
-      : 'bg-gray-100 text-gray-500';
+      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+      : 'bg-muted text-muted-foreground';
   return (
     <span className={`px-1.5 py-0.5 rounded text-xs font-mono shrink-0 ${color}`}>
       {score.toFixed(1)}
@@ -261,13 +263,13 @@ export default function MercadosPage() {
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">Mercados</h1>
           {isTestnet && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">Testnet</span>
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">Testnet</span>
           )}
           {syncing && (
-            <span className="text-xs text-gray-400 animate-pulse">Sincronizando...</span>
+            <span className="text-xs text-muted-foreground/60 animate-pulse">Sincronizando...</span>
           )}
           {!syncing && syncResult && (syncResult.created > 0 || syncResult.updated > 0) && (
-            <span className="text-xs text-green-600">
+            <span className="text-xs text-green-600 dark:text-green-400">
               {syncResult.created > 0 && `+${syncResult.created} nuevos`}
               {syncResult.created > 0 && syncResult.updated > 0 && ', '}
               {syncResult.updated > 0 && `${syncResult.updated} actualizados`}
@@ -275,15 +277,15 @@ export default function MercadosPage() {
           )}
         </div>
         {selectableMarkets.length > 0 && (
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <Label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
             <input
               type="checkbox"
               checked={allSelected}
               onChange={toggleSelectAll}
-              className="rounded border-gray-300"
+              className="rounded border-border"
             />
             Seleccionar todos
-          </label>
+          </Label>
         )}
       </div>
 
@@ -294,17 +296,15 @@ export default function MercadosPage() {
             const count = filterCounts[f.key];
             if (f.key !== 'all' && count === 0) return null;
             return (
-              <button
+              <Button
                 key={f.key}
                 onClick={() => setFilter(filter === f.key ? 'all' : f.key)}
-                className={`px-3 py-1 text-xs rounded-full border transition-colors cursor-pointer ${
-                  filter === f.key
-                    ? 'bg-gray-800 text-white border-gray-800'
-                    : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
-                }`}
+                variant={filter === f.key ? 'default' : 'outline'}
+                size="xs"
+                className="rounded-full cursor-pointer"
               >
                 {f.label} ({count})
-              </button>
+              </Button>
             );
           })}
           {(() => {
@@ -316,16 +316,18 @@ export default function MercadosPage() {
             }, 0);
             const totalLabel = totalPending > 0 ? ` ($${formatVolume(String(totalPending))})` : '';
             return (
-              <button
+              <Button
                 onClick={() => setShowPendingOnly((v) => !v)}
-                className={`px-3 py-1 text-xs rounded-full border transition-colors cursor-pointer ${
+                variant={showPendingOnly ? 'secondary' : 'outline'}
+                size="xs"
+                className={`rounded-full cursor-pointer ${
                   showPendingOnly
-                    ? 'bg-amber-100 border-amber-300 text-amber-700'
-                    : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                    ? 'bg-amber-100 border-amber-300 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700'
+                    : ''
                 }`}
               >
                 Con liquidez pendiente{totalLabel}
-              </button>
+              </Button>
             );
           })()}
         </div>
@@ -336,48 +338,48 @@ export default function MercadosPage() {
       {/* Sort controls */}
       {markets.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-gray-400">Ordenar:</span>
+          <span className="text-xs text-muted-foreground/60">Ordenar:</span>
           {([['status', 'Estado'], ['score', 'Score'], ['date', 'Recientes'], ['volume', 'Volumen'], ['participants', 'Participantes']] as const).map(([key, label]) => (
-            <button
+            <Button
               key={key}
               onClick={() => {
                 if (sortBy === key) setSortAsc(!sortAsc);
                 else { setSortBy(key); setSortAsc(key === 'status' || key === 'volume' || key === 'participants'); }
               }}
-              className={`px-2 py-0.5 text-xs rounded border transition-colors cursor-pointer ${
-                sortBy === key
-                  ? 'bg-gray-800 text-white border-gray-800'
-                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
-              }`}
+              variant={sortBy === key ? 'default' : 'outline'}
+              size="xs"
+              className="cursor-pointer"
             >
               {label} {sortBy === key ? (sortAsc ? '\u2191' : '\u2193') : ''}
-            </button>
+            </Button>
           ))}
         </div>
       )}
 
       {/* Bulk action bar */}
       {selectedIds.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-          <span className="text-sm text-blue-700 font-medium">
+        <div className="flex flex-wrap items-center gap-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3">
+          <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">
             {selectedIds.size} mercado{selectedIds.size !== 1 ? 's' : ''} seleccionado{selectedIds.size !== 1 ? 's' : ''}
           </span>
           <div className="flex items-center gap-2 ml-auto">
-            <button
+            <Button
               onClick={handleBulkReject}
               disabled={bulkLoading || selectedRejectable.length === 0}
-              className="px-4 py-1.5 text-sm font-medium rounded-md bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 transition-colors cursor-pointer"
+              variant="destructive"
+              size="sm"
+              className="cursor-pointer"
             >
               {bulkLoading ? '...' : `Rechazar ${selectedRejectable.length}`}
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
-      {loading && <div className="text-sm text-gray-500">Cargando...</div>}
+      {loading && <div className="text-sm text-muted-foreground">Cargando...</div>}
 
       {!loading && markets.length === 0 && (
-        <div className="text-sm text-gray-500">No hay mercados</div>
+        <div className="text-sm text-muted-foreground">No hay mercados</div>
       )}
 
       <div className="grid gap-1">
@@ -391,12 +393,12 @@ export default function MercadosPage() {
             <Link
               key={m.id}
               href={`/dashboard/markets/${m.id}`}
-              className={`block border rounded-lg cursor-pointer hover:border-gray-400 transition-colors ${
+              className={`block border rounded-lg cursor-pointer hover:border-foreground/20 transition-colors ${
                 isSelected
-                  ? 'border-blue-400 ring-1 ring-blue-200 bg-white'
+                  ? 'border-blue-400 dark:border-blue-600 ring-1 ring-blue-200 dark:ring-blue-800 bg-card'
                   : m.status === 'in_resolution'
-                  ? 'border-amber-200 bg-amber-50/50'
-                  : 'border-gray-200 bg-white'
+                  ? 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10'
+                  : 'border-border bg-card'
               }`}
             >
               {/* Primary row: checkbox, status, title */}
@@ -407,7 +409,7 @@ export default function MercadosPage() {
                     checked={isSelected}
                     onChange={() => toggleSelect(m.id)}
                     onClick={(e) => e.stopPropagation()}
-                    className="rounded border-gray-300 shrink-0"
+                    className="rounded border-border shrink-0"
                   />
                 ) : (
                   <span className="w-4 shrink-0" />
@@ -416,51 +418,51 @@ export default function MercadosPage() {
                   {badge.label}
                 </span>
                 {m.score != null && <span className="hidden md:inline"><ScoreBadge score={m.score} /></span>}
-                <span className="text-sm font-medium text-gray-800 truncate flex-1 min-w-0">
+                <span className="text-sm font-medium text-foreground truncate flex-1 min-w-0">
                   {m.title}
                 </span>
                 {m.outcome ? (
-                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">
+                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
                     ✓ {m.outcome}
                   </span>
                 ) : m.resolution?.suggestedOutcome ? (
                   <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    m.resolution.confidence === 'high' ? 'bg-green-100 text-green-700' :
-                    m.resolution.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-gray-100 text-gray-500'
+                    m.resolution.confidence === 'high' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                    m.resolution.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                    'bg-muted text-muted-foreground'
                   }`}>
                     → {m.resolution.suggestedOutcome}
                   </span>
                 ) : null}
                 {m.resolution?.checkingAt && Date.now() - new Date(m.resolution.checkingAt).getTime() < 10 * 60 * 1000 && (
-                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-600 animate-pulse">Verificando...</span>
+                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300 animate-pulse">Verificando...</span>
                 )}
                 {m.status === 'closed' ? (
                   m.withdrawal?.withdrawnAt ? (
-                    <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">Liquidez retirada</span>
+                    <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">Liquidez retirada</span>
                   ) : m.withdrawal?.ownershipTransferredAt ? (
-                    <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 animate-pulse">Retiro en progreso</span>
+                    <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 animate-pulse">Retiro en progreso</span>
                   ) : m.pendingBalance && parseFloat(m.pendingBalance) > 0 ? (
-                    <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-600">Liquidez pendiente ${formatVolume(m.pendingBalance)}</span>
+                    <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">Liquidez pendiente ${formatVolume(m.pendingBalance)}</span>
                   ) : null
                 ) : m.pendingBalance && parseFloat(m.pendingBalance) > 0 ? (
-                  <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-600">Liquidez ${formatVolume(m.pendingBalance)}</span>
+                  <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400">Liquidez ${formatVolume(m.pendingBalance)}</span>
                 ) : null}
-                <span className="hidden md:inline text-xs text-gray-400 shrink-0">{m.category}</span>
+                <span className="hidden md:inline text-xs text-muted-foreground/60 shrink-0">{m.category}</span>
                 {m.volume && (
-                  <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-50 text-emerald-600">${formatVolume(m.volume)}</span>
+                  <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400">${formatVolume(m.volume)}</span>
                 )}
                 {m.participants != null && m.participants > 0 && (
-                  <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-50 text-blue-600">{m.participants} participantes</span>
+                  <span className="hidden md:inline shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">{m.participants} participantes</span>
                 )}
                 {m.stale && (
-                  <span className="hidden md:inline text-[10px] text-orange-500 shrink-0">stale</span>
+                  <span className="hidden md:inline text-[10px] text-orange-500 dark:text-orange-400 shrink-0">stale</span>
                 )}
                 {(() => {
                   const timeInfo = formatTimeInfo(m.status, m.endTimestamp);
                   if (!timeInfo) return null;
                   return (
-                    <span className={`hidden md:inline shrink-0 text-[10px] ${m.status === 'in_resolution' ? 'text-amber-500' : 'text-gray-400'}`}>
+                    <span className={`hidden md:inline shrink-0 text-[10px] ${m.status === 'in_resolution' ? 'text-amber-500 dark:text-amber-400' : 'text-muted-foreground/60'}`}>
                       {timeInfo}
                     </span>
                   );
@@ -470,7 +472,7 @@ export default function MercadosPage() {
                     <button
                       onClick={() => handleReject(m.id)}
                       disabled={actionLoading === m.id || bulkLoading}
-                      className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-100 hover:bg-red-200 text-red-700 disabled:opacity-50 transition-colors cursor-pointer"
+                      className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors cursor-pointer"
                     >
                       {actionLoading === m.id ? '...' : 'Rechazar'}
                     </button>
@@ -480,21 +482,21 @@ export default function MercadosPage() {
               {/* Secondary row: metadata (mobile only) */}
               <div className="flex md:hidden items-center gap-2 px-3 pb-2 pl-9 flex-wrap">
                 {m.score != null && <ScoreBadge score={m.score} />}
-                <span className="text-xs text-gray-400 shrink-0">{m.category}</span>
+                <span className="text-xs text-muted-foreground/60 shrink-0">{m.category}</span>
                 {m.volume && (
-                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-50 text-emerald-600">${formatVolume(m.volume)}</span>
+                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400">${formatVolume(m.volume)}</span>
                 )}
                 {m.participants != null && m.participants > 0 && (
-                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-50 text-blue-600">{m.participants}</span>
+                  <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">{m.participants}</span>
                 )}
                 {m.stale && (
-                  <span className="text-[10px] text-orange-500 shrink-0">stale</span>
+                  <span className="text-[10px] text-orange-500 dark:text-orange-400 shrink-0">stale</span>
                 )}
                 {(() => {
                   const timeInfo = formatTimeInfo(m.status, m.endTimestamp);
                   if (!timeInfo) return null;
                   return (
-                    <span className={`shrink-0 text-[10px] ${m.status === 'in_resolution' ? 'text-amber-500' : 'text-gray-400'}`}>
+                    <span className={`shrink-0 text-[10px] ${m.status === 'in_resolution' ? 'text-amber-500 dark:text-amber-400' : 'text-muted-foreground/60'}`}>
                       {timeInfo}
                     </span>
                   );
@@ -504,7 +506,7 @@ export default function MercadosPage() {
                     <button
                       onClick={() => handleReject(m.id)}
                       disabled={actionLoading === m.id || bulkLoading}
-                      className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-100 hover:bg-red-200 text-red-700 disabled:opacity-50 transition-colors cursor-pointer"
+                      className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors cursor-pointer"
                     >
                       {actionLoading === m.id ? '...' : 'Rechazar'}
                     </button>

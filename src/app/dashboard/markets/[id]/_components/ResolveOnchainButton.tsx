@@ -6,6 +6,7 @@ import { encodeFunctionData } from 'viem';
 import { useAccount, usePublicClient } from 'wagmi';
 import { PRECOG_MARKET_ABI, REPORTER_ABI, REPORTER_ADDRESSES } from '@/lib/contracts';
 import { getBasescanUrl } from '@/lib/chains';
+import { Button } from '@/components/ui/button';
 
 interface Props {
   marketId: string;
@@ -36,8 +37,8 @@ function TxLink({ hash, chainId }: { hash: string; chainId: number }) {
 function Param({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between text-[11px]">
-      <span className="text-gray-500">{label}</span>
-      <span className="text-gray-800 font-mono">{value}</span>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-foreground font-mono">{value}</span>
     </div>
   );
 }
@@ -157,8 +158,8 @@ export function ResolveOnchainButton({ marketId, onchainId, outcome, outcomes, m
   // Preview: TX1 resolve
   if (step === 'preview-resolve') {
     return (
-      <div className="rounded-md border border-gray-200 bg-white p-3 space-y-3 text-sm">
-        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">TX 1: Resolver mercado</p>
+      <div className="rounded-md border border-border bg-card p-3 space-y-3 text-sm">
+        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">TX 1: Resolver mercado</p>
         <div className="space-y-1">
           <Param label="Contrato" value={`${marketAddress.slice(0, 6)}...${marketAddress.slice(-4)}`} />
           <Param label="Funcion" value="reportResult" />
@@ -166,8 +167,8 @@ export function ResolveOnchainButton({ marketId, onchainId, outcome, outcomes, m
           <Param label="Outcome" value={`${outcomeIndex} (${outcome})`} />
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleResolve} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 cursor-pointer">Confirmar y firmar</button>
-          <button onClick={() => setStep('idle')} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">Cancelar</button>
+          <Button onClick={handleResolve} size="sm" className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600">Confirmar y firmar</Button>
+          <Button onClick={() => setStep('idle')} variant="outline" size="sm">Cancelar</Button>
         </div>
       </div>
     );
@@ -176,8 +177,8 @@ export function ResolveOnchainButton({ marketId, onchainId, outcome, outcomes, m
   // Preview: TX2 reporter
   if (step === 'preview-report' && reporterAddress) {
     return (
-      <div className="rounded-md border border-gray-200 bg-white p-3 space-y-3 text-sm">
-        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">TX 2: Reportar resultado</p>
+      <div className="rounded-md border border-border bg-card p-3 space-y-3 text-sm">
+        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">TX 2: Reportar resultado</p>
         <div className="space-y-1">
           <Param label="Contrato" value={`${reporterAddress.slice(0, 6)}...${reporterAddress.slice(-4)}`} />
           <Param label="Funcion" value="reportResult" />
@@ -186,8 +187,8 @@ export function ResolveOnchainButton({ marketId, onchainId, outcome, outcomes, m
           <Param label="Outcome" value={`${outcomeIndex} (${outcome})`} />
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleReport} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 cursor-pointer">Confirmar y firmar</button>
-          <button onClick={() => { setStep('refreshing'); fetch(`/api/markets/${marketId}/refresh?full=true`, { method: 'POST' }).then(() => { router.refresh(); setStep('done'); }); }} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">Omitir</button>
+          <Button onClick={handleReport} size="sm" className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600">Confirmar y firmar</Button>
+          <Button onClick={() => { setStep('refreshing'); fetch(`/api/markets/${marketId}/refresh?full=true`, { method: 'POST' }).then(() => { router.refresh(); setStep('done'); }); }} variant="outline" size="sm">Omitir</Button>
         </div>
       </div>
     );
@@ -205,16 +206,18 @@ export function ResolveOnchainButton({ marketId, onchainId, outcome, outcomes, m
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <button
+      <Button
         onClick={() => step === 'idle' || step === 'error' ? setStep(reportOnly ? 'preview-report' : 'preview-resolve') : undefined}
         disabled={busy || step === 'done'}
-        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 disabled:opacity-50 cursor-pointer"
+        variant="outline"
+        size="sm"
+        className="border-green-300 text-green-700 bg-green-50 hover:bg-green-100 dark:border-green-700 dark:text-green-300 dark:bg-green-900/30 dark:hover:bg-green-900/50"
       >
         {label}
-      </button>
+      </Button>
       {txHash && <TxLink hash={txHash} chainId={chainId} />}
       {step === 'done' && <span className="text-xs text-green-600">OK</span>}
-      {error && <span className="text-xs text-red-500 max-w-xs truncate" title={error}>Error: {error.slice(0, 60)}</span>}
+      {error && <span className="text-xs text-destructive max-w-xs truncate" title={error}>Error: {error.slice(0, 60)}</span>}
     </div>
   );
 }

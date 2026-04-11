@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
 
 export function TopicActions({ topicId, status }: { topicId: string; status: string }) {
   const router = useRouter();
@@ -35,22 +36,23 @@ export function TopicActions({ topicId, status }: { topicId: string; status: str
   return (
     <div className="flex items-center gap-2 shrink-0">
       {status === 'active' && (
-        <button
+        <Button
           onClick={handleGenerate}
           disabled={generating}
-          className="px-3 py-1.5 text-xs font-medium rounded bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition-colors cursor-pointer"
+          size="sm"
         >
           {generating ? 'Generando...' : 'Generar mercado'}
-        </button>
+        </Button>
       )}
       {(status === 'active' || status === 'stale') && (
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={handleDismiss}
           disabled={dismissing}
-          className="px-3 py-1.5 text-xs font-medium rounded border border-gray-300 hover:bg-gray-50 text-gray-600 disabled:opacity-50 transition-colors cursor-pointer"
         >
           {dismissing ? '...' : 'Descartar'}
-        </button>
+        </Button>
       )}
     </div>
   );

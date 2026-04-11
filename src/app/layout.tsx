@@ -28,12 +28,12 @@ export default async function RootLayout({
   const hasSession = cookieStore.has('session_token');
 
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: `if(!document.cookie.includes('tz='))document.cookie='tz='+Intl.DateTimeFormat().resolvedOptions().timeZone+';path=/;max-age=31536000'` }} />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-gray-50 text-gray-900`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
         <ClientShell hasSession={hasSession}>
           {children}

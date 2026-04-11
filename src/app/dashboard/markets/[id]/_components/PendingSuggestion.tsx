@@ -4,6 +4,10 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { MarketSnapshot } from '@/db/types';
 import { DiffTextAdded, DiffTextRemoved } from '@/app/_components/WordDiff';
+import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface Props {
   marketId: string;
@@ -77,6 +81,7 @@ function computeDiffs(current: MarketSnapshot, suggestion: MarketSnapshot): Fiel
 export function PendingSuggestion({ marketId, current, suggestion }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState<'accept' | 'discard' | null>(null);
+  const [isOpen, setIsOpen] = useState(true);
 
   const diffs = computeDiffs(current, suggestion);
 
@@ -103,54 +108,59 @@ export function PendingSuggestion({ marketId, current, suggestion }: Props) {
   }
 
   return (
-    <details open className="mb-4 rounded-md border border-indigo-200 bg-indigo-50/30 group">
-      <summary className="flex items-center justify-between px-4 py-3 cursor-pointer list-none">
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mb-4 rounded-md border border-indigo-200 bg-indigo-50/30 dark:border-indigo-800 dark:bg-indigo-950/30">
+      <div className="flex items-center justify-between px-4 py-3">
+        <CollapsibleTrigger className="flex items-center gap-2 cursor-pointer">
+          <ChevronRight className={cn('size-3 text-muted-foreground transition-transform', isOpen && 'rotate-90')} />
+          <span className="text-xs font-medium text-indigo-700 dark:text-indigo-300 uppercase tracking-wide">Sugerencia del pipeline</span>
+          <span className="text-[10px] text-indigo-500 dark:text-indigo-400">{diffs.length} cambio{diffs.length !== 1 ? 's' : ''}</span>
+        </CollapsibleTrigger>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-gray-400 group-open:rotate-90 transition-transform">&#9654;</span>
-          <span className="text-xs font-medium text-indigo-700 uppercase tracking-wide">Sugerencia del pipeline</span>
-          <span className="text-[10px] text-indigo-500">{diffs.length} cambio{diffs.length !== 1 ? 's' : ''}</span>
-        </div>
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={handleDiscard}
             disabled={loading !== null}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
           >
             {loading === 'discard' ? 'Descartando...' : 'Descartar'}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={handleAccept}
             disabled={loading !== null}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 cursor-pointer"
+            className="border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:border-indigo-700 dark:text-indigo-300 dark:bg-indigo-950/50 dark:hover:bg-indigo-950"
           >
             {loading === 'accept' ? 'Aceptando...' : 'Aceptar'}
-          </button>
+          </Button>
         </div>
-      </summary>
+      </div>
 
-      <div className="px-4 pb-3 space-y-3">
-        {diffs.map((d) => (
-          <div key={d.key}>
-            <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">{d.label}</span>
-            <div className="mt-1 grid grid-cols-2 gap-2">
-              <div className="rounded bg-white border border-gray-200 px-2 py-1.5">
-                <span className="text-[10px] text-gray-400 block mb-0.5">Actual</span>
-                {d.isText
-                  ? <DiffTextRemoved a={d.current} b={d.suggested} />
-                  : <span className="text-sm text-gray-700">{d.current}</span>
-                }
-              </div>
-              <div className="rounded bg-white border border-indigo-100 px-2 py-1.5">
-                <span className="text-[10px] text-indigo-400 block mb-0.5">Sugerido</span>
-                {d.isText
-                  ? <DiffTextAdded a={d.current} b={d.suggested} />
-                  : <span className="text-sm text-gray-700">{d.suggested}</span>
-                }
+      <CollapsibleContent>
+        <div className="px-4 pb-3 space-y-3">
+          {diffs.map((d) => (
+            <div key={d.key}>
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{d.label}</span>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                <div className="rounded bg-card border border-border px-2 py-1.5">
+                  <span className="text-[10px] text-muted-foreground block mb-0.5">Actual</span>
+                  {d.isText
+                    ? <DiffTextRemoved a={d.current} b={d.suggested} />
+                    : <span className="text-sm text-foreground">{d.current}</span>
+                  }
+                </div>
+                <div className="rounded bg-card border border-indigo-100 dark:border-indigo-800 px-2 py-1.5">
+                  <span className="text-[10px] text-indigo-400 dark:text-indigo-500 block mb-0.5">Sugerido</span>
+                  {d.isText
+                    ? <DiffTextAdded a={d.current} b={d.suggested} />
+                    : <span className="text-sm text-foreground">{d.suggested}</span>
+                  }
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
-    </details>
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

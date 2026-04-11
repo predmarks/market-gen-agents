@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, Children, type ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
 
 export function ExpandableList({ children, pageSize = 10 }: { children: ReactNode; pageSize?: number }) {
   const items = Children.toArray(children);
@@ -11,13 +12,14 @@ export function ExpandableList({ children, pageSize = 10 }: { children: ReactNod
     <>
       {items.slice(0, visible)}
       {remaining > 0 && (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setVisible((v) => v + pageSize)}
-          className="mt-3 text-sm text-gray-500 hover:text-gray-700 cursor-pointer"
+          className="mt-3 text-muted-foreground"
         >
           Mostrar más ({remaining} restantes)
-        </button>
+        </Button>
       )}
     </>
   );

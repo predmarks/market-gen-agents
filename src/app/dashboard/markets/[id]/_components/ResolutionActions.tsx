@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 
 export function ResolutionConfirmButton({ marketId, outcome }: { marketId: string; outcome: string }) {
   const router = useRouter();
@@ -22,13 +24,14 @@ export function ResolutionConfirmButton({ marketId, outcome }: { marketId: strin
   }
 
   return (
-    <button
+    <Button
       onClick={handleConfirm}
       disabled={loading}
-      className="px-4 py-2 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 transition-colors cursor-pointer"
+      size="sm"
+      className="bg-green-600 hover:bg-green-700 text-white dark:bg-green-700 dark:hover:bg-green-600"
     >
       {loading ? 'Confirmando...' : `Confirmar: ${outcome}`}
-    </button>
+    </Button>
   );
 }
 
@@ -47,13 +50,14 @@ export function ResolutionDiscardButton({ marketId }: { marketId: string }) {
   }
 
   return (
-    <button
+    <Button
       onClick={handleDiscard}
       disabled={loading}
-      className="px-4 py-2 text-sm font-medium rounded-md bg-gray-100 hover:bg-gray-200 text-gray-500 disabled:opacity-50 transition-colors cursor-pointer"
+      variant="ghost"
+      size="sm"
     >
       {loading ? '...' : 'Descartar'}
-    </button>
+    </Button>
   );
 }
 
@@ -80,39 +84,42 @@ export function ResolutionFeedbackButton({ marketId }: { marketId: string }) {
 
   if (!open) {
     return (
-      <button
+      <Button
         onClick={() => setOpen(true)}
-        className="px-4 py-2 text-sm font-medium rounded-md bg-gray-200 hover:bg-gray-300 text-gray-800 transition-colors cursor-pointer"
+        variant="secondary"
+        size="sm"
       >
         Reconsiderar
-      </button>
+      </Button>
     );
   }
 
   return (
     <div className="flex-1 space-y-2">
-      <textarea
+      <Textarea
         value={feedback}
         onChange={(e) => setFeedback(e.target.value)}
         placeholder="¿Por qué debería reconsiderarse? (ej: la fuente no es confiable, el dato cambió...)"
-        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400 resize-none"
+        className="resize-none focus-visible:ring-amber-400"
         rows={2}
         autoFocus
       />
       <div className="flex items-center gap-2">
-        <button
+        <Button
           onClick={handleSubmit}
           disabled={loading || !feedback.trim()}
-          className="px-3 py-1.5 text-sm font-medium rounded-md bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50 transition-colors cursor-pointer"
+          size="sm"
+          className="bg-amber-500 hover:bg-amber-600 text-white dark:bg-amber-600 dark:hover:bg-amber-500"
         >
           {loading ? 'Enviando...' : 'Enviar y re-evaluar'}
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => { setOpen(false); setFeedback(''); }}
-          className="px-3 py-1.5 text-sm font-medium rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors cursor-pointer"
+          variant="ghost"
+          size="sm"
         >
           Cancelar
-        </button>
+        </Button>
       </div>
     </div>
   );

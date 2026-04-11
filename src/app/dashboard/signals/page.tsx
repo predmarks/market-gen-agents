@@ -5,6 +5,9 @@ import { usePageContext } from '@/app/_components/PageContext';
 import { SourcingTrigger, SourcingLog, useSourcingData } from '../monitoring/_components/SourcingPanel';
 import { SearchInput } from '@/app/dashboard/_components/SearchInput';
 import { FilterCombobox, type FilterGroup, type ActiveFilter } from '@/app/dashboard/_components/FilterCombobox';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 
 interface SignalData {
   id: string;
@@ -30,10 +33,10 @@ interface Counts {
 const PAGE_SIZE = 100;
 
 const TYPE_BADGE: Record<string, { label: string; className: string }> = {
-  news: { label: 'Noticia', className: 'bg-blue-100 text-blue-700' },
-  data: { label: 'Dato', className: 'bg-amber-100 text-amber-700' },
-  social: { label: 'Social', className: 'bg-purple-100 text-purple-700' },
-  event: { label: 'Evento', className: 'bg-green-100 text-green-700' },
+  news: { label: 'Noticia', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
+  data: { label: 'Dato', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+  social: { label: 'Social', className: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' },
+  event: { label: 'Evento', className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
 };
 
 function formatDate(dateStr: string): string {
@@ -194,7 +197,7 @@ export default function SignalsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Señales {counts && <span className="text-sm font-normal text-gray-400">({counts.total.toLocaleString()})</span>}</h1>
+        <h1 className="text-2xl font-bold">Señales {counts && <span className="text-sm font-normal text-muted-foreground">({counts.total.toLocaleString()})</span>}</h1>
         <SourcingTrigger
           triggering={triggering}
           hasRunning={hasRunning}
@@ -219,16 +222,16 @@ export default function SignalsPage() {
       </div>
 
       {/* Signal list */}
-      {loading && <div className="text-sm text-gray-500">Cargando señales...</div>}
+      {loading && <div className="text-sm text-muted-foreground">Cargando señales...</div>}
 
       {!loading && signals.length === 0 && (
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-muted-foreground">
           {debouncedQuery ? 'Sin resultados para la búsqueda' : 'No hay señales ingresadas'}
         </div>
       )}
 
       {signals.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-50">
+        <Card className="divide-y divide-border">
           {signals.map((s) => {
             const badge = TYPE_BADGE[s.type] ?? TYPE_BADGE.news;
             return (
@@ -241,27 +244,27 @@ export default function SignalsPage() {
                   {s.score != null && (
                     <span
                       className={`hidden md:inline shrink-0 px-1 py-0.5 rounded text-[10px] font-mono mt-0.5 ${
-                        s.score >= 7 ? 'bg-green-100 text-green-700' :
-                        s.score >= 4 ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-gray-100 text-gray-500'
+                        s.score >= 7 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                        s.score >= 4 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                        'bg-muted text-muted-foreground'
                       }`}
                       title={s.scoreReason ?? undefined}
                     >
                       {s.score.toFixed(1)}
                     </span>
                   )}
-                  <span className="hidden md:inline shrink-0 text-gray-400 mt-0.5">{s.source}</span>
-                  <span className="hidden md:inline shrink-0 text-gray-300 mt-0.5">{formatDate(s.publishedAt)}</span>
+                  <span className="hidden md:inline shrink-0 text-muted-foreground mt-0.5">{s.source}</span>
+                  <span className="hidden md:inline shrink-0 text-muted-foreground/50 mt-0.5">{formatDate(s.publishedAt)}</span>
                   <div className="min-w-0 flex-1 mt-0.5">
-                    <span className="text-gray-700">
+                    <span className="text-foreground/80">
                       {s.url ? (
-                        <a href={s.url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 hover:underline">
+                        <a href={s.url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 dark:hover:text-blue-400 hover:underline">
                           {s.text}
                         </a>
                       ) : s.text}
                     </span>
                     {s.dataPoints && s.dataPoints.length > 0 && (
-                      <span className="text-gray-400 ml-1">
+                      <span className="text-muted-foreground ml-1">
                         {s.dataPoints.map((dp) => {
                           const prev = dp.previousValue != null ? ` (ant: ${dp.previousValue})` : '';
                           return `${dp.currentValue} ${dp.unit}${prev}`;
@@ -275,39 +278,41 @@ export default function SignalsPage() {
                   {s.score != null && (
                     <span
                       className={`shrink-0 px-1 py-0.5 rounded text-[10px] font-mono ${
-                        s.score >= 7 ? 'bg-green-100 text-green-700' :
-                        s.score >= 4 ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-gray-100 text-gray-500'
+                        s.score >= 7 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                        s.score >= 4 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                        'bg-muted text-muted-foreground'
                       }`}
                       title={s.scoreReason ?? undefined}
                     >
                       {s.score.toFixed(1)}
                     </span>
                   )}
-                  <span className="shrink-0 text-gray-400">{s.source}</span>
-                  <span className="shrink-0 text-gray-300">{formatDate(s.publishedAt)}</span>
+                  <span className="shrink-0 text-muted-foreground">{s.source}</span>
+                  <span className="shrink-0 text-muted-foreground/50">{formatDate(s.publishedAt)}</span>
                 </div>
               </div>
             );
           })}
-        </div>
+        </Card>
       )}
 
       {/* Load more */}
       {hasMore && !loading && (
         <div className="flex justify-center">
-          <button
+          <Button
             onClick={() => fetchSignals(true)}
             disabled={loadingMore}
-            className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+            variant="outline"
+            className="cursor-pointer"
           >
             {loadingMore ? 'Cargando...' : `Cargar más (${signals.length} de ${total.toLocaleString()})`}
-          </button>
+          </Button>
         </div>
       )}
 
       {/* Ingestion log */}
-      <div className="pt-4 border-t border-gray-200">
+      <div className="pt-4">
+        <Separator className="mb-4" />
         <SourcingLog runs={runs} loading={runsLoading} />
       </div>
     </div>

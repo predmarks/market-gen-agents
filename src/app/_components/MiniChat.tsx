@@ -6,6 +6,11 @@ import ReactMarkdown from 'react-markdown';
 import { ActivityCard } from './ActivityCard';
 import type { ActivityEntry } from './ActivityCard';
 import { usePageContext } from './PageContext';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { MessageSquare, Plus, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -75,7 +80,7 @@ function PersistedActivityCards({ activityIds }: { activityIds: string[] }) {
   if (entries.length === 0) return null;
 
   return (
-    <div className="space-y-1.5 mx-1 p-2 bg-gray-50 rounded border border-gray-100 mt-1">
+    <div className="space-y-1.5 mx-1 p-2 bg-muted rounded border border-border mt-1">
       {entries.map((entry) => (
         <ActivityCard key={entry.id} entry={entry} compact />
       ))}
@@ -99,19 +104,17 @@ export function MiniChat() {
   const [error, setError] = useState<string | null>(null);
   const [chatListOpen, setChatListOpen] = useState(false);
   const [activityEntries, setActivityEntries] = useState<ActivityEntry[]>([]);
-  const [width, setWidth] = useState(384); // 24rem = w-96
+  const [width, setWidth] = useState(384);
   const [pollingEntries, setPollingEntries] = useState<ActivityEntry[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load width from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('minichat-width');
     if (saved) setWidth(Math.min(600, Math.max(280, Number(saved))));
   }, []);
 
-  // Keyboard shortcuts: "c" to open, "Shift+C" to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
@@ -154,7 +157,6 @@ export function MiniChat() {
     document.body.style.userSelect = 'none';
   }
 
-  // Detect context from pathname — resolve topic slugs to IDs
   useEffect(() => {
     const newCtx = detectContext(pathname);
 
@@ -229,7 +231,6 @@ export function MiniChat() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Reset chat when context changes
   useEffect(() => {
     setActiveConvId(null);
     setMessages([]);
@@ -240,12 +241,10 @@ export function MiniChat() {
     if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
   }, [pathname]);
 
-  // Cleanup polling on unmount
   useEffect(() => {
     return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
   }, []);
 
-  // Poll for background job completion
   const COMPLETION_MAP: Record<string, string[]> = {
     generation_started: ['generation_completed'],
     review_started: ['review_completed'],
@@ -261,7 +260,7 @@ export function MiniChat() {
     const since = backgroundActions[0].createdAt;
     const targetActions = backgroundActions.flatMap((e) => COMPLETION_MAP[e.action]);
     let attempts = 0;
-    const maxAttempts = 60; // 5 min at 5s intervals
+    const maxAttempts = 60;
 
     if (pollingRef.current) clearInterval(pollingRef.current);
 
@@ -303,7 +302,6 @@ export function MiniChat() {
   }
 
   function handleLoadConversation(conv: Conversation) {
-    // Don't load conversations from a different context — prevents operating on wrong entity
     if (context.id && conv.contextId && conv.contextId !== context.id) return;
     setActiveConvId(conv.id);
     setMessages(conv.messages);
@@ -349,7 +347,7 @@ export function MiniChat() {
           conversationId: activeConvId,
           ...(pageData ? { pageContext: pageData } : {}),
         }),
-        signal: AbortSignal.timeout(300_000), // 5 min for multi-turn
+        signal: AbortSignal.timeout(300_000),
       });
 
       if (!res.ok) {
@@ -368,7 +366,6 @@ export function MiniChat() {
       if (conversationId && !activeConvId) setActiveConvId(conversationId);
       fetchConversations();
 
-      // Fetch activity entries if any tools were executed
       setPollingEntries([]);
       if (activityIds?.length > 0) {
         try {
@@ -390,7 +387,6 @@ export function MiniChat() {
         router.refresh();
       }
 
-      // Notify page components that chat made changes
       window.dispatchEvent(new CustomEvent('minichat:updated'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error');
@@ -403,73 +399,80 @@ export function MiniChat() {
     return (
       <>
         {/* Desktop: sidebar toggle */}
-        <div className="hidden md:flex w-10 shrink-0 bg-white border-r border-gray-200 flex-col items-center pt-4 order-first">
-          <button
+        <div className="hidden md:flex w-10 shrink-0 bg-background border-r border-border flex-col items-center pt-4 order-first">
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setOpen(true)}
-            className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded flex items-center justify-center text-sm cursor-pointer transition-colors"
             title="Abrir chat"
           >
-            💬
-          </button>
+            <MessageSquare className="size-4" />
+          </Button>
         </div>
         {/* Mobile: floating FAB */}
-        <button
+        <Button
           onClick={() => setOpen(true)}
-          className="md:hidden fixed bottom-4 right-4 z-50 w-12 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-lg cursor-pointer transition-colors"
+          size="icon-lg"
+          className="md:hidden fixed bottom-4 right-4 z-50 rounded-full shadow-lg"
           title="Abrir chat"
         >
-          💬
-        </button>
+          <MessageSquare className="size-5" />
+        </Button>
       </>
     );
   }
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-white flex flex-col md:static md:inset-auto md:z-auto md:shrink-0 md:bg-white md:border-r md:border-gray-200 md:flex-row md:order-first"
+      className="fixed inset-0 z-50 bg-background flex flex-col md:static md:inset-auto md:z-auto md:shrink-0 md:border-r md:border-border md:flex-row md:order-first"
       style={{ width }}
     >
       <div className="flex-1 flex flex-col min-w-0">
       {/* Header */}
-      <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-end gap-2 shrink-0">
-        <button onClick={handleNewConversation} className="text-xs text-blue-600 hover:text-blue-800 cursor-pointer">+ Nueva</button>
-        <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer text-lg">&times;</button>
+      <div className="px-4 py-2 border-b border-border flex items-center justify-end gap-2 shrink-0">
+        <Button variant="ghost" size="sm" onClick={handleNewConversation} className="gap-1 text-xs">
+          <Plus className="size-3" />
+          Nueva
+        </Button>
+        <Button variant="ghost" size="icon-xs" onClick={() => setOpen(false)}>
+          <X className="size-4" />
+        </Button>
       </div>
 
       {/* Conversation list */}
       {(() => {
-        // Client-side filter: only show conversations matching current context
         const filtered = context.id
           ? conversations.filter((c) => c.contextId === context.id)
           : conversations;
         const filteredCount = context.id ? filtered.length : totalConvs;
         if (filtered.length === 0) return null;
         return (
-        <div className="border-b border-gray-200 bg-gray-50 shrink-0">
+        <div className="border-b border-border bg-muted/50 shrink-0">
           <button
             onClick={() => setChatListOpen(!chatListOpen)}
-            className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] text-gray-500 hover:text-gray-700 cursor-pointer"
+            className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
           >
             <span>{filteredCount} conversación{filteredCount !== 1 ? 'es' : ''}</span>
             <span>{chatListOpen ? '\u25B2' : '\u25BC'}</span>
           </button>
-          {chatListOpen && <div className="px-2 pb-2 max-h-36 overflow-y-auto bg-gray-50" onScroll={handleConvListScroll}>
+          {chatListOpen && <div className="px-2 pb-2 max-h-36 overflow-y-auto" onScroll={handleConvListScroll}>
           {filtered.map((conv) => (
             <div key={conv.id} className="flex items-center gap-1">
               <button
                 onClick={() => handleLoadConversation(conv)}
-                className={`flex-1 text-left px-2 py-1 rounded text-xs truncate cursor-pointer transition-colors ${
+                className={cn(
+                  'flex-1 text-left px-2 py-1 rounded text-xs truncate cursor-pointer transition-colors',
                   activeConvId === conv.id
-                    ? 'bg-gray-100 text-gray-900 font-medium'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
+                    ? 'bg-accent text-accent-foreground font-medium'
+                    : 'text-muted-foreground hover:bg-accent/50'
+                )}
               >
                 {conv.title}
-                <span className="text-gray-300 ml-1">{formatTime(conv.updatedAt)}</span>
+                <span className="text-muted-foreground/50 ml-1">{formatTime(conv.updatedAt)}</span>
               </button>
               <button
                 onClick={() => handleDeleteConversation(conv.id)}
-                className="text-gray-300 hover:text-red-500 text-xs px-1 cursor-pointer shrink-0"
+                className="text-muted-foreground/50 hover:text-destructive text-xs px-1 cursor-pointer shrink-0"
                 title="Eliminar"
               >
                 &times;
@@ -477,7 +480,7 @@ export function MiniChat() {
             </div>
           ))}
           {loadingMore && (
-            <p className="text-center text-[10px] text-gray-400 py-1">Cargando...</p>
+            <p className="text-center text-[10px] text-muted-foreground py-1">Cargando...</p>
           )}
           </div>}
         </div>
@@ -487,26 +490,26 @@ export function MiniChat() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
         {messages.length === 0 && !loading && (
-          <div className="text-xs text-gray-400 py-6 px-2 space-y-1.5">
+          <div className="text-xs text-muted-foreground py-6 px-2 space-y-1.5">
             {context.type === 'topic' ? (<>
-              <p className="text-gray-300">Probá algo como:</p>
+              <p className="text-muted-foreground/60">Probá algo como:</p>
               <p>Resumí las últimas señales</p>
               <p>Sugerí ángulos para mercados</p>
               <p>Investigá más sobre este tema</p>
               <p>Cambiá la categoría a Economía</p>
             </>) : context.type === 'market' ? (<>
-              <p className="text-gray-300">Probá algo como:</p>
+              <p className="text-muted-foreground/60">Probá algo como:</p>
               <p>Revisá los criterios de resolución</p>
               <p>Mejorá la descripción</p>
               <p>Lanzá el pipeline de revisión</p>
               <p>Cambiá las contingencias</p>
             </>) : context.label === 'Reglas' ? (<>
-              <p className="text-gray-300">Probá algo como:</p>
+              <p className="text-muted-foreground/60">Probá algo como:</p>
               <p>Mostrá las reglas estrictas</p>
               <p>Deshabilitá la regla H11</p>
               <p>Creá una regla nueva</p>
             </>) : (<>
-              <p className="text-gray-300">Probá algo como:</p>
+              <p className="text-muted-foreground/60">Probá algo como:</p>
               <p>Buscá temas sobre economía</p>
               <p>Ingresá nuevas señales</p>
               <p>Generá mercados desde los mejores temas</p>
@@ -520,11 +523,12 @@ export function MiniChat() {
           return (
             <div key={i}>
               <div
-                className={`text-sm rounded px-3 py-2 ${
+                className={cn(
+                  'text-sm rounded px-3 py-2',
                   msg.role === 'user'
-                    ? 'bg-blue-50 text-blue-900 ml-4'
-                    : 'bg-gray-50 text-gray-700 mr-4 prose prose-sm max-w-none'
-                }`}
+                    ? 'bg-primary/10 text-foreground ml-4'
+                    : 'bg-muted text-foreground mr-4 prose prose-sm max-w-none dark:prose-invert'
+                )}
               >
                 {msg.role === 'assistant' ? <ReactMarkdown>{msg.content}</ReactMarkdown> : msg.content}
               </div>
@@ -535,9 +539,8 @@ export function MiniChat() {
           );
         })}
 
-        {/* Activity cards from current tool executions (last message) */}
         {activityEntries.length > 0 && !loading && (
-          <div className="space-y-1.5 mx-1 p-2 bg-gray-50 rounded border border-gray-100">
+          <div className="space-y-1.5 mx-1 p-2 bg-muted rounded border border-border">
             {activityEntries.map((entry) => (
               <ActivityCard key={entry.id} entry={entry} compact />
             ))}
@@ -545,21 +548,21 @@ export function MiniChat() {
               <ActivityCard key={entry.id} entry={entry} compact />
             ))}
             {pollingRef.current && pollingEntries.length === 0 && (
-              <p className="text-[10px] text-gray-400 animate-pulse">Esperando resultado...</p>
+              <p className="text-[10px] text-muted-foreground animate-pulse">Esperando resultado...</p>
             )}
           </div>
         )}
 
         {loading && (
-          <div className="text-sm text-gray-400 mr-4 px-3 py-2">Pensando...</div>
+          <div className="text-sm text-muted-foreground mr-4 px-3 py-2">Pensando...</div>
         )}
         <div ref={chatEndRef} />
       </div>
 
       {/* Input */}
-      <div className="px-4 py-3 border-t border-gray-100 shrink-0">
+      <div className="px-4 py-3 border-t border-border shrink-0">
         <form onSubmit={handleSend} className="flex gap-2">
-          <input
+          <Input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -569,23 +572,23 @@ export function MiniChat() {
               : 'Preguntá algo...'
               : 'Responder...'}
             disabled={loading}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent disabled:opacity-50"
+            className="flex-1"
           />
-          <button
+          <Button
             type="submit"
+            variant="secondary"
             disabled={loading || !input.trim()}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 transition-colors cursor-pointer"
           >
             Enviar
-          </button>
+          </Button>
         </form>
-        {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
+        {error && <p className="text-sm text-destructive mt-1">{error}</p>}
       </div>
       </div>
-      {/* Resize handle — desktop only */}
+      {/* Resize handle */}
       <div
         onMouseDown={handleResizeStart}
-        className="hidden md:block w-1.5 bg-gray-200 hover:bg-blue-400 cursor-col-resize shrink-0 transition-colors"
+        className="hidden md:block w-1.5 bg-border hover:bg-primary/30 cursor-col-resize shrink-0 transition-colors"
       />
     </div>
   );

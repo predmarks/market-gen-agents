@@ -6,6 +6,8 @@ import { markets } from '@/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import type { MarketStatus, Review } from '@/db/types';
 import { StatusBadge } from '../_components/StatusBadge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 function formatDate(date: Date | null | undefined): string {
   if (!date) return '—';
@@ -44,37 +46,34 @@ export default async function ArchivePage({ searchParams }: Props) {
       <h1 className="text-2xl font-bold mb-6">Archivo</h1>
 
       <form className="mb-6 flex gap-3">
-        <input
+        <Input
           name="q"
           type="text"
           defaultValue={q ?? ''}
           placeholder="Buscar por título..."
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+          className="flex-1"
         />
         <select
           name="status"
           defaultValue={status ?? ''}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+          className="px-3 py-2 border border-border rounded-md text-sm bg-background"
         >
           <option value="">Todos los estados</option>
           <option value="rejected">Rechazados</option>
           <option value="cancelled">Cancelados</option>
           <option value="closed">Resueltos</option>
         </select>
-        <button
-          type="submit"
-          className="px-4 py-2 text-sm font-medium rounded-md bg-gray-200 hover:bg-gray-300 text-gray-800"
-        >
+        <Button type="submit" variant="secondary">
           Buscar
-        </button>
+        </Button>
       </form>
 
       {results.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
+        <div className="text-center py-12 text-muted-foreground">
           No hay mercados archivados{q ? ` que coincidan con "${q}"` : ''}.
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
+        <div className="bg-card rounded-lg border border-border divide-y divide-border">
           {results.map((market) => {
             const review = market.review as Review | null;
             const score = review?.scores?.overallScore;
@@ -83,26 +82,26 @@ export default async function ArchivePage({ searchParams }: Props) {
               <Link
                 key={market.id}
                 href={`/dashboard/markets/${market.id}`}
-                className="block px-4 py-3 hover:bg-gray-50 transition-colors"
+                className="block px-4 py-3 hover:bg-muted transition-colors"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium text-gray-900 truncate">
+                    <p className="font-medium text-foreground truncate">
                       {market.title}
                     </p>
                     <div className="flex items-center gap-3 mt-1">
                       <StatusBadge status={market.status as MarketStatus} />
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-muted-foreground">
                         {market.category}
                       </span>
                       {score != null && (
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-muted-foreground">
                           Score: {score.toFixed(1)}
                         </span>
                       )}
                     </div>
                   </div>
-                  <div className="text-right text-xs text-gray-500 shrink-0">
+                  <div className="text-right text-xs text-muted-foreground shrink-0">
                     <div>{formatDate(market.createdAt)}</div>
                   </div>
                 </div>

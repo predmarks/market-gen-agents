@@ -6,6 +6,7 @@ import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId 
 import { zeroAddress } from 'viem';
 import { PRECOG_MASTER_ABI, MASTER_ADDRESSES } from '@/lib/contracts';
 import { getBasescanUrl } from '@/lib/chains';
+import { Button } from '@/components/ui/button';
 import { CopyJsonButton } from './CopyJsonButton';
 import { DiffTextAdded, DiffTextRemoved } from '@/app/_components/WordDiff';
 
@@ -172,71 +173,74 @@ export function MarketDiff(props: Props) {
     <details className="mb-4 rounded-md border border-amber-200 bg-amber-50/30 group">
       <summary className="flex items-center justify-between px-4 py-3 cursor-pointer list-none">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-gray-400 group-open:rotate-90 transition-transform">&#9654;</span>
-          <span className="text-xs font-medium text-amber-700 uppercase tracking-wide">Diff Local / Onchain</span>
+          <span className="text-[10px] text-muted-foreground group-open:rotate-90 transition-transform">&#9654;</span>
+          <span className="text-xs font-medium text-amber-700 dark:text-amber-300 uppercase tracking-wide">Diff Local / Onchain</span>
           <span className="text-[10px] text-amber-500">{diffs.length} diferencia{diffs.length !== 1 ? 's' : ''}</span>
         </div>
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <button
+          <Button
             onClick={handleDiscard}
             disabled={discarding || isPending || isConfirming}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+            variant="outline"
+            size="sm"
           >
             {discarding ? 'Descartando...' : 'Descartar'}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => isPending || isConfirming ? undefined : showPreview ? handleUpdate() : setShowPreview(true)}
             disabled={isPending || isConfirming}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 cursor-pointer"
+            variant="outline"
+            size="sm"
+            className="border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:border-indigo-700 dark:text-indigo-300 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50"
           >
             {isPending ? 'Firmando...' : isConfirming ? 'Confirmando...' : 'Update onchain'}
-          </button>
+          </Button>
           {hash && (isPending || isConfirming) && (
             <a href={`${getBasescanUrl(chainId)}/tx/${hash}`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 hover:underline font-mono">
               {hash.slice(0, 10)}...
             </a>
           )}
           {isSuccess && <span className="text-xs text-green-600">Confirmado</span>}
-          {error && <span className="text-xs text-red-500 max-w-xs truncate" title={error.message}>Error</span>}
+          {error && <span className="text-xs text-destructive max-w-xs truncate" title={error.message}>Error</span>}
         </div>
       </summary>
 
       <div className="px-4 pb-3 space-y-3">
         {/* Tx preview panel */}
         {showPreview && (
-          <div className="rounded-md border border-gray-200 bg-white p-3 space-y-2">
-            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Verificar transaccion</p>
+          <div className="rounded-md border border-border bg-card p-3 space-y-2">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Verificar transaccion</p>
             <div className="space-y-1 text-[11px]">
-              <div className="flex justify-between"><span className="text-gray-500">Contrato</span><span className="font-mono text-gray-800">{masterAddress.slice(0, 6)}...{masterAddress.slice(-4)}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Funcion</span><span className="font-mono text-gray-800">updateMarket</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Market ID</span><span className="font-mono text-gray-800">{props.onchainId}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Contrato</span><span className="font-mono text-foreground">{masterAddress.slice(0, 6)}...{masterAddress.slice(-4)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Funcion</span><span className="font-mono text-foreground">updateMarket</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Market ID</span><span className="font-mono text-foreground">{props.onchainId}</span></div>
               {diffs.map((d) => (
-                <div key={d.label} className="flex justify-between gap-2"><span className="text-gray-500 shrink-0">{d.label}</span><span className="text-gray-800 text-right truncate">{truncate(d.local)}</span></div>
+                <div key={d.label} className="flex justify-between gap-2"><span className="text-muted-foreground shrink-0">{d.label}</span><span className="text-foreground text-right truncate">{truncate(d.local)}</span></div>
               ))}
             </div>
             <div className="flex items-center gap-2 pt-1">
-              <button onClick={handleUpdate} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer">Confirmar y firmar</button>
-              <button onClick={() => setShowPreview(false)} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">Cancelar</button>
+              <Button onClick={handleUpdate} size="sm" className="bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600">Confirmar y firmar</Button>
+              <Button onClick={() => setShowPreview(false)} variant="outline" size="sm">Cancelar</Button>
             </div>
           </div>
         )}
 
         {diffs.map((d) => (
           <div key={d.label}>
-            <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">{d.label}</span>
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{d.label}</span>
             <div className="mt-1 grid grid-cols-2 gap-2">
-              <div className="rounded bg-white border border-blue-100 px-2 py-1.5">
+              <div className="rounded bg-card border border-blue-100 dark:border-blue-900 px-2 py-1.5">
                 <span className="text-[10px] text-blue-400 block mb-0.5">Local</span>
                 {d.isText
                   ? <DiffTextAdded a={d.chain} b={d.local} />
-                  : <span className="text-sm text-gray-700">{d.local}</span>
+                  : <span className="text-sm text-foreground">{d.local}</span>
                 }
               </div>
-              <div className="rounded bg-white border border-gray-200 px-2 py-1.5">
-                <span className="text-[10px] text-gray-400 block mb-0.5">Onchain</span>
+              <div className="rounded bg-card border border-border px-2 py-1.5">
+                <span className="text-[10px] text-muted-foreground block mb-0.5">Onchain</span>
                 {d.isText
                   ? <DiffTextRemoved a={d.chain} b={d.local} />
-                  : <span className="text-sm text-gray-700">{d.chain}</span>
+                  : <span className="text-sm text-foreground">{d.chain}</span>
                 }
               </div>
             </div>
@@ -245,12 +249,12 @@ export function MarketDiff(props: Props) {
 
         {/* Patch JSON */}
         <details open className="group/json">
-          <summary className="text-[10px] text-gray-400 cursor-pointer list-none flex items-center gap-1">
+          <summary className="text-[10px] text-muted-foreground cursor-pointer list-none flex items-center gap-1">
             <span className="group-open/json:rotate-90 transition-transform">&#9654;</span>
             Patch JSON
           </summary>
           <div className="mt-1 relative">
-            <pre className="text-[11px] bg-gray-50 text-gray-800 border border-gray-200 rounded p-3 overflow-x-auto">{buildPatchJson(props, diffs)}</pre>
+            <pre className="text-[11px] bg-muted text-foreground border border-border rounded p-3 overflow-x-auto">{buildPatchJson(props, diffs)}</pre>
             <div className="absolute top-2 right-2">
               <CopyJsonButton json={buildPatchJson(props, diffs)} />
             </div>

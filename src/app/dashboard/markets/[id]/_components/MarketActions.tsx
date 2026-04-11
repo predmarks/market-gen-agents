@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import type { MarketStatus, Review, Iteration } from '@/db/types';
 import { ARCHIVABLE_STATUSES } from '@/db/types';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface MarketActionsProps {
   marketId: string;
@@ -12,6 +14,14 @@ interface MarketActionsProps {
   iterations?: Iteration[] | null;
   isArchived: boolean;
 }
+
+const actionStyles = {
+  indigo: 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-950',
+  violet: 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300 dark:hover:bg-violet-950',
+  rose: 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-950',
+  amber: 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-950',
+  slate: 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300 dark:hover:bg-slate-800',
+} as const;
 
 export function MarketActions({ marketId, status, iterations, isArchived }: MarketActionsProps) {
   const router = useRouter();
@@ -60,99 +70,81 @@ export function MarketActions({ marketId, status, iterations, isArchived }: Mark
     <>
       <>
         {status === 'candidate' && (
-          <ActionButton
-            label="Iniciar Revisión"
-            loading={loading === 'review'}
+          <Button
+            variant="outline"
+            className={cn(actionStyles.indigo)}
+            disabled={loading === 'review'}
             onClick={() => handleAction(`/api/review/${marketId}`)}
-            variant="indigo"
-          />
+          >
+            {loading === 'review' ? 'Procesando...' : 'Iniciar Revisión'}
+          </Button>
         )}
 
         {status === 'processing' && (
           <>
-            <p className="text-sm text-amber-700 bg-amber-50 px-4 py-2 rounded-md">
+            <p className="text-sm text-amber-700 bg-amber-50 px-4 py-2 rounded-md dark:bg-amber-950/50 dark:text-amber-300">
               Procesando… {iterationCount > 0 ? `(iteración ${iterationCount})` : ''}
             </p>
-            <ActionButton
-              label="Cancelar"
-              loading={loading === 'cancel'}
+            <Button
+              variant="outline"
+              className={cn(actionStyles.amber)}
+              disabled={loading === 'cancel'}
               onClick={() => handleAction('cancel')}
-              variant="amber"
-            />
+            >
+              {loading === 'cancel' ? 'Procesando...' : 'Cancelar'}
+            </Button>
           </>
         )}
 
         {status === 'cancelled' && (
-          <ActionButton
-            label="Reanudar"
-            loading={loading === 'resume'}
+          <Button
+            variant="outline"
+            className={cn(actionStyles.violet)}
+            disabled={loading === 'resume'}
             onClick={() => handleAction('resume')}
-            variant="violet"
-          />
+          >
+            {loading === 'resume' ? 'Procesando...' : 'Reanudar'}
+          </Button>
         )}
 
         {status === 'candidate' && (
-          <ActionButton
-            label="Rechazar"
-            loading={loading === 'reject'}
+          <Button
+            variant="outline"
+            className={cn(actionStyles.rose)}
+            disabled={loading === 'reject'}
             onClick={() =>
               handleAction('reject', {
                 body: JSON.stringify({ reason: 'Rejected by reviewer' }),
               })
             }
-            variant="rose"
-          />
+          >
+            {loading === 'reject' ? 'Procesando...' : 'Rechazar'}
+          </Button>
         )}
 
         {(ARCHIVABLE_STATUSES as readonly string[]).includes(status) && !isArchived && (
-          <ActionButton
-            label="Archivar"
-            loading={loading === 'archive'}
+          <Button
+            variant="outline"
+            className={cn(actionStyles.slate)}
+            disabled={loading === 'archive'}
             onClick={() => handleAction('archive')}
-            variant="slate"
-          />
+          >
+            {loading === 'archive' ? 'Procesando...' : 'Archivar'}
+          </Button>
         )}
 
         {isArchived && (
-          <ActionButton
-            label="Desarchivar"
-            loading={loading === 'unarchive'}
+          <Button
+            variant="outline"
+            className={cn(actionStyles.slate)}
+            disabled={loading === 'unarchive'}
             onClick={() => handleAction('unarchive')}
-            variant="slate"
-          />
+          >
+            {loading === 'unarchive' ? 'Procesando...' : 'Desarchivar'}
+          </Button>
         )}
       </>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </>
-  );
-}
-
-function ActionButton({
-  label,
-  loading,
-  onClick,
-  variant,
-}: {
-  label: string;
-  loading: boolean;
-  onClick: () => void;
-  variant: 'indigo' | 'violet' | 'rose' | 'amber' | 'slate';
-}) {
-  const styles = {
-    indigo: 'border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100',
-    violet: 'border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100',
-    rose: 'border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100',
-    amber: 'border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100',
-    slate: 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100',
-  };
-
-  return (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      className={`px-4 py-2 text-sm font-medium rounded-md transition-colors disabled:opacity-50 ${styles[variant]}`}
-    >
-      {loading ? 'Procesando...' : label}
-    </button>
   );
 }

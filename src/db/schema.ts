@@ -10,6 +10,7 @@ import {
   index,
   real,
   uniqueIndex,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import type { SourceContext, Review, Resolution, Iteration, MarketSnapshot, SourcingStep, MarketEventType } from './types';
 import type { SourceSignal } from '@/agents/sourcer/types';
@@ -47,6 +48,7 @@ export const markets = pgTable(
     participants: integer('participants'),
     ownedParticipants: integer('owned_participants').default(0),
     pendingBalance: varchar('pending_balance', { length: 40 }),
+    seededAmount: varchar('seeded_amount', { length: 40 }),
     chainId: integer('chain_id').notNull().default(8453),
   },
   (table) => [
@@ -145,6 +147,7 @@ export const topicSignals = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [
+    primaryKey({ columns: [table.topicId, table.signalId] }),
     index('topic_signals_topic_idx').on(table.topicId),
   ],
 ).enableRLS();

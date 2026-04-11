@@ -44,7 +44,7 @@ export default async function TopicDetailPage({ params }: Props) {
 
   if (!topic) notFound();
 
-  const linkedSignals = await db
+  const rawLinkedSignals = await db
     .select({
       id: signals.id,
       type: signals.type,
@@ -59,6 +59,13 @@ export default async function TopicDetailPage({ params }: Props) {
     .innerJoin(signals, eq(topicSignals.signalId, signals.id))
     .where(eq(topicSignals.topicId, topic.id))
     .orderBy(desc(signals.publishedAt));
+
+  const seen = new Set<string>();
+  const linkedSignals = rawLinkedSignals.filter((s) => {
+    if (seen.has(s.id)) return false;
+    seen.add(s.id);
+    return true;
+  });
 
   // Related markets (linked via sourceContext.topicIds)
   const relatedMarkets = await db

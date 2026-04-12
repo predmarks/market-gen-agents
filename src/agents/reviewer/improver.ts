@@ -1,4 +1,5 @@
 import { callClaude } from '@/lib/llm';
+import { todayAR, formatDateAR } from '@/lib/dates';
 import { CONTINGENCY_TEMPLATES } from '@/config/contingencies';
 import type { MarketSnapshot, Iteration } from '@/db/types';
 import type { MarketRecord } from './types';
@@ -86,7 +87,7 @@ export async function improveMarket(
     tags: (market as unknown as { tags: string[] }).tags,
     outcomes: market.outcomes,
     endTimestamp: market.endTimestamp,
-    endDate: new Date(market.endTimestamp * 1000).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }),
+    endDate: formatDateAR(market.endTimestamp),
     expectedResolutionDate: market.expectedResolutionDate,
     timingSafety: market.timingSafety,
   };
@@ -134,7 +135,7 @@ ${formatContingencyTemplates()}
 
 ${(() => {
   const now = Math.floor(Date.now() / 1000);
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayAR();
   return `HOY: ${today} (Unix timestamp: ${now})
 REFERENCIA TIMESTAMPS (para calcular endTimestamp):
 - Hoy ${today} = ${now}

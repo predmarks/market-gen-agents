@@ -1,4 +1,5 @@
 import { callClaude } from '@/lib/llm';
+import { todayAR, formatDateAR } from '@/lib/dates';
 import { SCORING_WEIGHTS, THRESHOLDS } from '@/config/scoring';
 import type { ReviewScores } from '@/db/types';
 import type { DataVerificationResult } from './data-verifier';
@@ -73,7 +74,7 @@ export async function scoreMarket(
     contingencies: market.contingencies,
     category: market.category,
     endTimestamp: market.endTimestamp,
-    endDate: new Date(market.endTimestamp * 1000).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }),
+    endDate: formatDateAR(market.endTimestamp),
   };
 
   const userMessage = `Puntuá este mercado candidato para Predmarks.
@@ -126,7 +127,7 @@ RÚBRICA DE PUNTUACIÓN:
    BONUS: Mercados donde la probabilidad va a oscilar puntúan más alto.
    BONUS: Más señales relacionadas = más interés público. 10+ señales = fuerte señal de relevancia, 20+ = tema caliente.
 
-Fecha de hoy: ${new Date().toISOString().split('T')[0]}
+Fecha de hoy: ${todayAR()}
 
 Puntuá cada dimensión (0-10) con razonamiento, y dá una recomendación:
 - "publish": listo para publicar

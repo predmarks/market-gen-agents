@@ -1,4 +1,5 @@
 import { callClaudeWithSearch } from '@/lib/llm';
+import { todayAR, formatDateAR } from '@/lib/dates';
 import type { DataVerification, ResolutionSourceCheck } from '@/db/types';
 import type { MarketRecord } from './types';
 
@@ -56,7 +57,7 @@ export async function verifyData(
     contingencies: market.contingencies,
     category: market.category,
     endTimestamp: market.endTimestamp,
-    endDate: new Date(market.endTimestamp * 1000).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }),
+    endDate: formatDateAR(market.endTimestamp),
   };
 
   const userMessage = `Verify every numerical claim and factual assertion in this candidate market.
@@ -76,7 +77,7 @@ Also verify the resolution source:
 
 If there are no numerical claims to verify, return an empty claims array but still verify the resolution source.
 
-Today's date: ${new Date().toISOString().split('T')[0]}`;
+Today's date: ${todayAR()}`;
 
   const { result } = await callClaudeWithSearch<DataVerificationResult>({
     system: SYSTEM_PROMPT,

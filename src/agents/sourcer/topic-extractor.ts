@@ -1,4 +1,5 @@
 import { callClaude } from '@/lib/llm';
+import { todayAR } from '@/lib/dates';
 import { db } from '@/db/client';
 import { topics as topicsTable, globalFeedback } from '@/db/schema';
 import { desc, gte, eq, and, isNotNull, lt } from 'drizzle-orm';
@@ -195,7 +196,7 @@ export async function updateTopics(
 ): Promise<TopicUpdate[]> {
   if (signals.length === 0) return [];
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayAR();
   const editorFeedback = await loadEditorFeedback();
 
   const { result } = await callClaude<{ topicUpdates: TopicUpdate[] }>({

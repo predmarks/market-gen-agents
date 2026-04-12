@@ -1,4 +1,5 @@
 import { callClaude } from '@/lib/llm';
+import { todayAR } from '@/lib/dates';
 import { loadRules } from '@/config/rules';
 import { db } from '@/db/client';
 import { marketEvents, markets, globalFeedback, config } from '@/db/schema';
@@ -227,7 +228,7 @@ export async function generateMarkets(
     loadGenerationPrompt(),
     formatRules(),
   ]);
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayAR();
 
   const editorInstructions: string[] = [];
   if (marketType === 'multi-outcome') {

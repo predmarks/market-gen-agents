@@ -1,4 +1,5 @@
 import { callClaude } from '@/lib/llm';
+import { todayAR, formatDateAR } from '@/lib/dates';
 import { loadRules, type Rule } from '@/config/rules';
 import type { RuleResult } from '@/db/types';
 import type { DataVerificationResult } from './data-verifier';
@@ -84,7 +85,7 @@ export async function checkRules(
     tags: market.tags,
     outcomes: market.outcomes,
     endTimestamp: market.endTimestamp,
-    endDate: new Date(market.endTimestamp * 1000).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }),
+    endDate: formatDateAR(market.endTimestamp),
     createdAt: market.createdAt,
   };
 
@@ -107,7 +108,7 @@ ${formatRules(applicableSoft)}
 
 Para cada regla (estricta y blanda), respondé con ruleId, passed (true/false), y explanation.
 
-Fecha de hoy: ${new Date().toISOString().split('T')[0]}`;
+Fecha de hoy: ${todayAR()}`;
 
   const { result } = await callClaude<{
     hardRuleResults: RuleResult[];

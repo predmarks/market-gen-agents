@@ -1,4 +1,5 @@
 import { callClaude } from '@/lib/llm';
+import { todayAR } from '@/lib/dates';
 import type { SourceSignal } from './types';
 
 const SYSTEM_PROMPT = `Sos un evaluador de señales para Predmarks, una plataforma argentina de mercados de predicción.
@@ -96,7 +97,7 @@ export async function scoreSignals(signals: SourceSignal[]): Promise<SourceSigna
     })
     .join('\n');
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayAR();
 
   const { result } = await callClaude<{ scores: ScoreResult[] }>({
     system: SYSTEM_PROMPT,

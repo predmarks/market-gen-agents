@@ -1,4 +1,5 @@
 import { callClaudeWithSearch } from '@/lib/llm';
+import { formatDateAR } from '@/lib/dates';
 import type { ReviewScores, SourceContext, Resolution } from '@/db/types';
 
 // --- Input types ---
@@ -231,7 +232,7 @@ function buildUserMessage(input: NewsletterInput): string {
       `Categoría: ${m.category}`,
       `Opciones: ${(m.outcomes).join(', ')}`,
       `Odds: ${odds}`,
-      `Cierra en: ${daysLeft} (${new Date(m.endTimestamp * 1000).toISOString().split('T')[0]})`,
+      `Cierra en: ${daysLeft} (${formatDateAR(m.endTimestamp).split(',')[0]})`,
       m.volume ? `Volumen: ${m.volume}` : null,
       m.url ? `URL: ${m.url}` : null,
       scores ? `Scores: overall=${scores.overallScore}, volumePotential=${scores.volumePotential}, timeliness=${scores.timeliness}` : null,

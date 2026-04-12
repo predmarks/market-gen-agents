@@ -1,4 +1,5 @@
 import { callClaudeWithSearch } from '@/lib/llm';
+import { todayAR, formatDateAR } from '@/lib/dates';
 import { db } from '@/db/client';
 import { config, resolutionFeedback } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
@@ -126,9 +127,9 @@ MERCADO:
 - Opciones: ${market.outcomes.join(', ')}
 - Criterios de resolución: ${market.resolutionCriteria}
 - Fuente de resolución: ${market.resolutionSource}
-- Cierre del mercado: ${endDate.toISOString()} ${isPastDeadline ? '(YA PASÓ)' : ''}
+- Cierre del mercado: ${formatDateAR(endDate)} ${isPastDeadline ? '(YA PASÓ)' : ''}
 
-HOY: ${now.toISOString().split('T')[0]}
+HOY: ${todayAR()}
 ${market.sourceContent ? `\nCONTENIDO DE LA FUENTE DE RESOLUCIÓN (pre-cargado de ${market.sourceContent.url}):\n${market.sourceContent.text}` : ''}
 ${feedbackContext.length > 0 ? `\nFEEDBACK DE RESOLUCIONES PREVIAS:\n${feedbackContext.map((f) => `- ${f}`).join('\n')}` : ''}
 

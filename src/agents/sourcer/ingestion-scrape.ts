@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import { todayAR } from '@/lib/dates';
 import type { SignalSource } from '@/config/sources';
 import type { SourceSignal } from './types';
 
@@ -115,7 +116,7 @@ async function scrapeContentSource(source: SignalSource, config: ScrapeConfig): 
         system: `Sos un extractor de datos. Buscá la información solicitada y devolvé el contenido estructurado en texto plano.
 Incluí todos los datos relevantes: fechas, nombres, resultados, horarios, etc.
 Respondé en español argentino. Sé exhaustivo pero conciso.`,
-        userMessage: `Extraé los datos actualizados de: ${searchQuery}\nFuente principal: ${source.url}\nFecha actual: ${new Date().toISOString().split('T')[0]}`,
+        userMessage: `Extraé los datos actualizados de: ${searchQuery}\nFuente principal: ${source.url}\nFecha actual: ${todayAR()}`,
         outputSchema: {
           type: 'object' as const,
           properties: {

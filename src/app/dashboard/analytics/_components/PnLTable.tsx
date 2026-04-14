@@ -93,7 +93,7 @@ function sortMarkets(markets: MarketRow[], key: SortKey, dir: SortDir): MarketRo
 
 export default function PnLTable({ markets }: { markets: MarketRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('week');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const handleSort = (key: SortKey) => {
     if (key === sortKey) {

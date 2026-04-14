@@ -6,6 +6,7 @@ import { base, baseSepolia } from 'viem/chains';
 import { PRECOG_MASTER_ABI, COLLATERAL_TOKENS } from './contracts';
 import { MAINNET_CHAIN_ID } from './chains';
 import { getOwnedAddresses } from './owned-addresses';
+import { refreshPendingBalances } from './sync-deployed';
 import { fetchOwnedPositionsDetailed, fetchMarketTxHashes, type OwnedPositionDetail } from './indexer';
 import type { Resolution } from '@/db/types';
 
@@ -532,11 +533,12 @@ function computeOwnedPositionsPnL(
 // --- Main analytics function ---
 
 export async function getAnalyticsData(chainId: number): Promise<AnalyticsData> {
-  // Phase 1: Cache deployment dates and withdrawal data (writes to DB)
-  const [, seededMap, withdrawnMap, ownedAddresses] = await Promise.all([
+  // Phase 1: Cache deployment dates, seeded/withdrawn/pending balances (writes to DB)
+  const [, seededMap, withdrawnMap, , ownedAddresses] = await Promise.all([
     fetchAndCacheDeploymentDates(chainId),
     fetchAndCacheSeededAmounts(chainId),
     fetchAndCacheWithdrawnAmounts(chainId),
+    refreshPendingBalances(chainId),
     getOwnedAddresses(),
   ]);
 

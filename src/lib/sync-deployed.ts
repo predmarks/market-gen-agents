@@ -138,22 +138,40 @@ export async function syncMarketStats(chainId: number = MAINNET_CHAIN_ID): Promi
       ),
     );
 
-  if (marketsWithAddress.length > 0) {
-    const addresses = marketsWithAddress.map((m) => m.onchainAddress as `0x${string}`);
-    const balances = await fetchPendingBalances(addresses, chainId);
-
-    for (const m of marketsWithAddress) {
-      const balance = balances.get(m.onchainAddress!.toLowerCase());
-      if (balance !== undefined) {
-        await db
-          .update(markets)
-          .set({ pendingBalance: balance.toString() })
-          .where(eq(markets.id, m.id));
-      }
-    }
-  }
+  await refreshPendingBalances(chainId);
 
   return { created, updated };
+}
+
+/**
+ * Fetches on-chain USDC balances for all deployed markets on a chain
+ * and caches them in `markets.pendingBalance`. Cheap batched multicall.
+ */
+export async function refreshPendingBalances(chainId: number): Promise<void> {
+  const marketsWithAddress = await db
+    .select({ id: markets.id, onchainAddress: markets.onchainAddress })
+    .from(markets)
+    .where(
+      and(
+        eq(markets.chainId, chainId),
+        isNotNull(markets.onchainAddress),
+      ),
+    );
+
+  if (marketsWithAddress.length === 0) return;
+
+  const addresses = marketsWithAddress.map((m) => m.onchainAddress as `0x${string}`);
+  const balances = await fetchPendingBalances(addresses, chainId);
+
+  for (const m of marketsWithAddress) {
+    const balance = balances.get(m.onchainAddress!.toLowerCase());
+    if (balance !== undefined) {
+      await db
+        .update(markets)
+        .set({ pendingBalance: balance.toString() })
+        .where(eq(markets.id, m.id));
+    }
+  }
 }
 
 export async function syncDeployedMarkets(chainId: number = MAINNET_CHAIN_ID): Promise<{
